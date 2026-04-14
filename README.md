@@ -115,7 +115,7 @@ print("User ID: " .. uid)
 
 The hook system intercepts GTA V native function calls made by any resource on the client. When a hooked native is called, your callback fires and you can read arguments, modify the return value, or block the call entirely.
 
-**Maximum hooks:** 8 simultaneous.
+
 
 ### `Stealth.HookNative(hash, callback)`
 
@@ -128,7 +128,7 @@ Hooks a GTA V native by its hash. The callback fires every time any resource cal
 | `hash` | `number` | The 64-bit native hash (e.g. `0x6D0DE6A7B5DA71F8` for `GetPlayerName`) |
 | `callback` | `function` | Your hook function — see return behavior below |
 
-**Returns:** `boolean` — `true` if the native exists and was hooked successfully, `false` if the hash is invalid, the native doesn't exist in the game, or all 8 slots are full.
+**Returns:** `boolean` — `true` if the native exists and was hooked successfully, `false` if the hash is invalid, the native doesn't exist in the game
 
 #### Callback Return Behavior
 
