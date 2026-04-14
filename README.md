@@ -25,7 +25,7 @@ Returns the current Stealth API version.
 | | |
 |---|---|
 | **Parameters** | None |
-| **Returns** | `number` — Version identifier (e.g. `1337`) |
+| **Returns** | `number` — Version identifier |
 
 ```lua
 local ver = Stealth.GetVersion()
@@ -162,6 +162,11 @@ Hook any GTA V / FiveM native function. Your callback fires every time the nativ
 
 **Maximum hooks:** 8 simultaneous hooks.
 
+### How it works
+
+- **Return nothing** from your callback → the native runs normally (passthrough). Use this for logging.
+- **Return a value** from your callback → the native's result is replaced with your value. The type of value you return determines how it's applied.
+
 ### `Stealth.HookNative(hash, callback)`
 Hooks a native function by its 64-bit hash.
 
@@ -171,37 +176,106 @@ Hooks a native function by its 64-bit hash.
 | | `callback` — `function` — Called each time the native fires |
 | **Returns** | `boolean` — `true` if the hook was registered, `false` if slots are full |
 
-**Callback return values:**
+**Callback return behavior:**
 
 | Return | Effect |
 |--------|--------|
-| *(nothing)* | Native executes normally |
-| `false` | Blocks the original native from executing |
-| `false, value` | Blocks the native and sets a custom return value |
+| *(nothing)* | Native runs normally, result unchanged (logging only) |
+| `false` | Blocks the original result |
+| `number` | Replaces result with an integer |
+| `string` | Replaces result with a string |
+| `vector3(x, y, z)` | Replaces result with a vector3 |
+| `{x, y, z}` | Replaces result with a vector3 (table form) |
+| `x, y, z` | Replaces result with a vector3 (multi-return form) |
 
-**Example 1: Log every time a native fires**
+---
+
+### Example: Log a native call (passthrough)
+
 ```lua
--- Log every time GetPlayerName is called
+-- Log every time GetEntityCoords is called, but don't change anything
+-- 0x3FEF770D40960D5A = GET_ENTITY_COORDS
+Stealth.HookNative(0x3FEF770D40960D5A, function()
+    local entity = Stealth.GetArg(0)
+    print("[Hook] GetEntityCoords called for entity " .. tostring(entity))
+end)
+```
+
+---
+
+### Example: Spoof a vector3 return (coordinates)
+
+```lua
+-- Make GetEntityCoords always return a fake position
+Stealth.HookNative(0x3FEF770D40960D5A, function()
+    local entity = Stealth.GetArg(0)
+    print("[Hook] Spoofing coords for entity " .. tostring(entity))
+    return vector3(100.0, 200.0, 300.0)
+end)
+
+-- Verify it works
+Wait(500)
+local pos = GetEntityCoords(PlayerPedId(), true)
+print(pos) -- Should print: vec3(100.0, 200.0, 300.0)
+```
+
+You can also return vectors as a table or multiple values:
+```lua
+-- Table form
+Stealth.HookNative(0x3FEF770D40960D5A, function()
+    return { 100.0, 200.0, 300.0 }
+end)
+
+-- Multi-return form
+Stealth.HookNative(0x3FEF770D40960D5A, function()
+    return 100.0, 200.0, 300.0
+end)
+```
+
+---
+
+### Example: Spoof a string return (player name)
+
+```lua
+-- Make GetPlayerName always return a fake name
 -- 0x6D0DE6A7B5DA71F8 = GET_PLAYER_NAME
 Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
     local playerId = Stealth.GetArg(0)
     print("[Hook] GetPlayerName called for player " .. tostring(playerId))
+    return "not-real-player-name"
 end)
+
+-- Verify it works
+Wait(500)
+local name = GetPlayerName(PlayerId())
+print(name) -- Should print: not-real-player-name
 ```
 
-**Example 2: Spoof the return value**
+---
+
+### Example: Spoof an integer return (health)
+
 ```lua
--- Make GetPlayerName always return a fake name
-Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    local playerId = Stealth.GetArg(0)
-    print("[Hook] Spoofing name for player " .. tostring(playerId))
-    return false, "not-real-player-name"
+-- Make GetEntityHealth always return 999
+-- 0xEEF059FAD016D209 = GET_ENTITY_HEALTH
+Stealth.HookNative(0xEEF059FAD016D209, function()
+    local entity = Stealth.GetArg(0)
+    print("[Hook] GetEntityHealth called for entity " .. tostring(entity))
+    return 999
 end)
+
+-- Verify it works
+Wait(500)
+local hp = GetEntityHealth(PlayerPedId())
+print("Health: " .. hp) -- Should print: Health: 999
 ```
 
-**Example 3: Block a native entirely**
+---
+
+### Example: Block a native entirely
+
 ```lua
--- Block SetEntityHealth so nobody can change health
+-- Block SetEntityHealth so nothing can change health
 -- 0x6B76DC1F3AE6E6A3 = SET_ENTITY_HEALTH
 Stealth.HookNative(0x6B76DC1F3AE6E6A3, function()
     local entity = Stealth.GetArg(0)
@@ -222,6 +296,12 @@ Removes a previously registered native hook.
 | **Returns** | `boolean` — `true` if the hook was found and removed |
 
 ```lua
+-- Hook it
+Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
+    return "not-real-player-name"
+end)
+
+-- Later, remove it
 Stealth.UnhookNative(0x6D0DE6A7B5DA71F8)
 ```
 
@@ -236,9 +316,10 @@ Reads an integer argument from the currently executing hooked native. **Only val
 | **Returns** | `number` — The integer value of the argument |
 
 ```lua
+-- Log the arguments passed to a native
 Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
     local playerId = Stealth.GetArg(0)
-    print("Player ID passed to native: " .. tostring(playerId))
+    print("Arg 0 (player ID): " .. tostring(playerId))
 end)
 ```
 
@@ -253,7 +334,7 @@ Reads a float argument from the currently executing hooked native (returned as r
 | **Returns** | `number` — The raw float bits as an integer |
 
 ```lua
--- Hook SetEntityCoords and log the position
+-- Log float arguments from SetEntityCoords
 -- 0x06843DA7060A026B = SET_ENTITY_COORDS
 Stealth.HookNative(0x06843DA7060A026B, function()
     local entity = Stealth.GetArg(0)
@@ -404,7 +485,6 @@ Stealth.InjectResource("es_extended", [[
 ```
 
 ```lua
--- Inject into any available resource
 Stealth.InjectResource("any", "print('Hello from injection')")
 ```
 
@@ -425,10 +505,8 @@ Executes JavaScript in the FiveM NUI browser page.
 | **Returns** | `boolean` — `true` if the command was sent |
 
 ```lua
--- Change the page title
 Stealth.ExecuteJS("document.title = 'Stealth'")
 
--- Show a fullscreen overlay for 3 seconds
 Stealth.ExecuteJS([[
     var div = document.createElement('div');
     div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:999999;display:flex;align-items:center;justify-content:center;';
@@ -462,45 +540,13 @@ local dui = Stealth.CreateDui("http://localhost:8080/menu.html", 800, 600)
 
 ---
 
-### `Stealth.ShowDui(handle)`
-Makes a DUI window visible.
+### `Stealth.ShowDui(handle)` / `Stealth.HideDui(handle)` / `Stealth.DestroyDui(handle)`
 
-| | |
-|---|---|
-| **Parameters** | `handle` — `table` — DUI handle from `CreateDui` |
-| **Returns** | None |
-
-```lua
-Stealth.ShowDui(dui)
-```
-
----
-
-### `Stealth.HideDui(handle)`
-Hides a DUI window without destroying it.
-
-| | |
-|---|---|
-| **Parameters** | `handle` — `table` — DUI handle from `CreateDui` |
-| **Returns** | None |
-
-```lua
-Stealth.HideDui(dui)
-```
-
----
-
-### `Stealth.DestroyDui(handle)`
-Permanently removes a DUI window and cleans up its resources.
-
-| | |
-|---|---|
-| **Parameters** | `handle` — `table` — DUI handle from `CreateDui` |
-| **Returns** | None |
-
-```lua
-Stealth.DestroyDui(dui)
-```
+| Function | Description |
+|----------|-------------|
+| `ShowDui(handle)` | Makes a DUI window visible |
+| `HideDui(handle)` | Hides a DUI window without destroying it |
+| `DestroyDui(handle)` | Permanently removes a DUI window |
 
 ---
 
@@ -509,13 +555,7 @@ Changes the URL of an existing DUI window.
 
 | | |
 |---|---|
-| **Parameters** | `handle` — `table` — DUI handle |
-| | `url` — `string` — New URL to navigate to |
-| **Returns** | None |
-
-```lua
-Stealth.SetDuiUrl(dui, "https://example.com")
-```
+| **Parameters** | `handle` — `table` — DUI handle, `url` — `string` — New URL |
 
 ---
 
@@ -524,16 +564,7 @@ Sets the position and size of a DUI window in pixels.
 
 | | |
 |---|---|
-| **Parameters** | `handle` — `table` — DUI handle |
-| | `x` — `number` — Left position in pixels |
-| | `y` — `number` — Top position in pixels |
-| | `w` — `number` — Width in pixels |
-| | `h` — `number` — Height in pixels |
-| **Returns** | None |
-
-```lua
-Stealth.SetDuiPosition(dui, 100, 100, 600, 400)
-```
+| **Parameters** | `handle` — `table`, `x` — pixels, `y` — pixels, `w` — pixels, `h` — pixels |
 
 ---
 
@@ -542,9 +573,7 @@ Sends a message to the DUI page via `window.postMessage`. Catch it with `window.
 
 | | |
 |---|---|
-| **Parameters** | `handle` — `table` — DUI handle |
-| | `data` — `string` or `table` — Data to send (tables are JSON-encoded) |
-| **Returns** | None |
+| **Parameters** | `handle` — `table`, `data` — `string` or `table` (tables are JSON-encoded) |
 
 **Lua side:**
 ```lua
@@ -568,9 +597,7 @@ Executes JavaScript directly inside a DUI iframe.
 
 | | |
 |---|---|
-| **Parameters** | `handle` — `table` — DUI handle |
-| | `script` — `string` — JavaScript code |
-| **Returns** | None |
+| **Parameters** | `handle` — `table`, `script` — `string` — JavaScript code |
 
 ```lua
 Stealth.ExecuteDuiScript(dui, "document.body.style.background = 'red'")
@@ -580,17 +607,58 @@ Stealth.ExecuteDuiScript(dui, "document.body.style.background = 'red'")
 
 ## Complete Examples
 
-### Native Hook Logger
+### Native Hook: Spoof Player Name
 
 ```lua
--- Log every GetPlayerName call and spoof the return value
 Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
     local playerId = Stealth.GetArg(0)
     print("[Hook] GetPlayerName called for player " .. tostring(playerId))
-    return false, "not-real-player-name"
+    return "not-real-player-name"
 end)
 
-Stealth.AddNotification("GetPlayerName hook active!", Stealth.NOTIFY_SUCCESS)
+Wait(500)
+local name = GetPlayerName(PlayerId())
+print("Name: " .. name)
+
+Stealth.AddNotification("Name spoofed to: not-real-player-name", Stealth.NOTIFY_SUCCESS)
+```
+
+### Native Hook: Spoof Coordinates
+
+```lua
+Stealth.HookNative(0x3FEF770D40960D5A, function()
+    local entity = Stealth.GetArg(0)
+    print("[Hook] GetEntityCoords spoofed for entity " .. tostring(entity))
+    return vector3(0.0, 0.0, 0.0)
+end)
+
+Wait(500)
+local pos = GetEntityCoords(PlayerPedId(), true)
+print(pos)
+
+Stealth.AddNotification("Coords spoofed to 0,0,0", Stealth.NOTIFY_SUCCESS)
+```
+
+### Native Hook: Spoof Health
+
+```lua
+Stealth.HookNative(0xEEF059FAD016D209, function()
+    return 999
+end)
+
+Wait(500)
+local hp = GetEntityHealth(PlayerPedId())
+print("Health: " .. hp)
+```
+
+### Native Hook: Logger Only (No Spoofing)
+
+```lua
+Stealth.HookNative(0x3FEF770D40960D5A, function()
+    local entity = Stealth.GetArg(0)
+    local alive = Stealth.GetArg(1)
+    print("[Log] GetEntityCoords entity=" .. tostring(entity) .. " alive=" .. tostring(alive))
+end)
 ```
 
 ### Keybind System
@@ -605,7 +673,7 @@ Citizen.CreateThread(function()
         if Stealth.IsControlJustPressed(VK_F6) then
             Stealth.AddNotification("F6 pressed!", Stealth.NOTIFY_SUCCESS)
         end
-        if Stealth.IsControlJustPressed(0x41) then -- A key
+        if Stealth.IsControlJustPressed(0x41) then
             print("A key pressed!")
         end
     end
@@ -626,16 +694,10 @@ Citizen.CreateThread(function()
         Wait(500)
         if dui then
             local ped = PlayerPedId()
-            local hp = GetEntityHealth(ped)
-            local armor = GetPedArmour(ped)
-            local pos = GetEntityCoords(ped)
             Stealth.SendDuiMessage(dui, {
                 type = "playerUpdate",
-                health = hp,
-                armor = armor,
-                x = pos.x,
-                y = pos.y,
-                z = pos.z
+                health = GetEntityHealth(ped),
+                armor = GetPedArmour(ped),
             })
         end
     end
@@ -662,14 +724,13 @@ Citizen.CreateThread(function()
 end)
 ```
 
-### Resource Injection with Callback
+### Resource Injection
 
 ```lua
 Stealth.InjectResource("es_extended", [[
     local xPlayer = ESX.GetPlayerData()
     if xPlayer then
         print("Job: " .. xPlayer.job.name)
-        print("Money: " .. tostring(xPlayer.accounts[1].money))
     end
 ]])
 
@@ -679,7 +740,6 @@ Stealth.AddNotification("Code injected into es_extended", Stealth.NOTIFY_SUCCESS
 ### JavaScript DOM Manipulation
 
 ```lua
--- Inject a custom banner into the NUI page
 Stealth.ExecuteJS([[
     var banner = document.createElement('div');
     banner.id = 'stealth_banner';
@@ -688,7 +748,6 @@ Stealth.ExecuteJS([[
     document.body.appendChild(banner);
 ]])
 
--- Remove it after 5 seconds
 Wait(5000)
 Stealth.ExecuteJS("var e=document.getElementById('stealth_banner');if(e)e.remove();")
 ```
@@ -765,10 +824,10 @@ Number keys `0`-`9` use their ASCII values: `0x30` — `0x39`.
 Citizen.CreateThread(function()
     while true do
         Wait(0)
-        if Stealth.IsControlJustPressed(0x41) then -- A key
+        if Stealth.IsControlJustPressed(0x41) then
             print("A pressed")
         end
-        if Stealth.IsControlJustPressed(0x31) then -- 1 key
+        if Stealth.IsControlJustPressed(0x31) then
             print("1 pressed")
         end
     end
