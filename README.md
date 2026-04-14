@@ -12,6 +12,7 @@
 2. [Execution Modes](#execution-modes)
 3. [Identity & Authentication](#identity--authentication)
 4. [Native Hooking](#native-hooking)
+   - [Isolated Resource Bypass](#isolated-resource-bypass)
 5. [Input System](#input-system)
 6. [Resource Injection](#resource-injection)
 7. [Notifications](#notifications)
