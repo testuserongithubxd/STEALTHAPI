@@ -222,6 +222,28 @@ end)
 print(ok)  -- false
 ```
 
+
+#### Isolated Resource Bypass
+
+When you call a hooked native from within the Isolated resource (your own scripts), the hook **does not fire**. You always get the original, unmodified result. This means you can spoof `GetPlayerName` for every other resource on the server while still reading the real player name in your own code.
+
+```lua
+-- Hook GetPlayerName to return fake name for all other resources
+Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
+    return "FakePlayer"
+end)
+
+-- But in YOUR code, you still get the real name
+Citizen.CreateThread(function()
+    Wait(1000)
+    local realName = GetPlayerName(PlayerId())
+    print("Real name: " .. realName)        -- prints the REAL name
+    print("Others see: FakePlayer")          -- every other resource sees "FakePlayer"
+end)
+```
+
+This applies to all hook types — string, integer, vector3, and block hooks. Your isolated code is never affected by your own hooks.
+
 ---
 
 ### `Stealth.UnhookNative(hash)`
