@@ -56,13 +56,13 @@ if you prefer not to use `Citizen.CreateThread` your code will only run at the l
 
 ### Isolated Resource
 
-Your code runs inside Stealth's own private resource. This is the default mode when you type code in the editor and press Execute. You have full access to the Stealth API and all FiveM client-side natives. Other resources on the server cannot see your code.
+Your code runs inside Stealth's own private resource. This is the default mode when you type code in the editor and press Execute. You have full access to the Stealth API and all client-side natives. Other resources on the server cannot see your code.
 
 Use this for: persistent scripts, native hooks, drawing, keybind systems, DUI overlays, anything that needs the Stealth API.
 
 ### Resource Injection
 
-Your code runs inside an existing server resource's Lua environment using `Stealth.InjectResource()`. This gives you access to that resource's local variables, functions, and event handlers. The Stealth API is **not** available inside injected code — only the target resource's own globals and standard FiveM functions.
+Your code runs inside an existing server resource's Lua environment using `Stealth.InjectResource()`. This gives you access to that resource's local variables, functions, and event handlers. The Stealth API is **not** available inside injected code — only the target resource's own globals and standard game functions.
 
 Use this for: accessing resource-specific data, calling resource-local functions using debug.getupvalue (can be hooked by the anticheat)
 
@@ -120,7 +120,7 @@ The hook system intercepts native function calls made by any resource on the cli
 
 ### `Stealth.HookNative(hash, callback)`
 
-Hooks a GTA V native by its hash. The callback fires every time any resource calls that native.
+Hooks a native by its hash. The callback fires every time any resource calls that native.
 
 **Parameters:**
 
@@ -317,7 +317,7 @@ end)
 
 ## Input System
 
-All input functions **only respond when FiveM is the active foreground window**. They will not fire when alt-tabbed or in another application.
+All input functions **only respond when the application is the active foreground window**. They will not fire when alt-tabbed or in another application.
 
 **Important:** Input functions must be called inside a `Citizen.CreateThread` loop with `Wait(0)`.
 
@@ -416,7 +416,6 @@ Executes Lua code inside another resource's environment. The code runs with that
 
 **Returns:** `boolean` — `true` if sent
 
-Errors in injected code are printed to the FiveM console with line numbers.
 
 ```lua
 -- Print inside a specific resource
@@ -485,7 +484,7 @@ Stealth.AddNotification("Player nearby")  -- defaults to INFO
 
 ### ImGui Drawing
 
-Draw commands render through the Stealth overlay (ImGui) — they are **not visible** in FiveM screenshots, screen shares, or server-side anti-cheat screen captures. All coordinates use normalized screen space (0.0–1.0).
+Draw commands render through the Stealth overlay (ImGui) — they are **not visible** in screenshots, screen shares, or server-side anti-cheat screen captures. All coordinates use normalized screen space (0.0–1.0).
 
 **Important:** Drawing must happen inside a `BeginDraw` / `EndDraw` pair every frame. If you skip `EndDraw`, nothing renders. If you skip `BeginDraw`, old frames stay on screen.
 
