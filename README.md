@@ -13,7 +13,7 @@ The API is available in the **Isolated** execution mode from the Lua Editor.
 | Mode | Description |
 |------|-------------|
 | **Resource** | Injects code into an existing server resource. Visible to that resource's environment. |
-| **Isolated** | Runs in a private, sandboxed runtime. No resource can see it. Full Stealth API available. |
+| **Isolated** | Runs in a private, sandboxed resource. No resource can see it. Full Stealth API available. |
 
 ---
 
