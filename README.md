@@ -586,15 +586,12 @@ end
 
 ---
 
-### CEF Images
-
-Images are rendered through FiveM's browser layer (CEF). Unlike ImGui drawing, these **may be visible** in screen captures.
+###  Images
 
 ---
 
 ## JavaScript Execution
 
-Execute code in FiveM's CEF (Chromium Embedded Framework) browser layer.
 
 ### `Stealth.ExecuteJS(script)`
 
