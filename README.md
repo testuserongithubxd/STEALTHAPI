@@ -2,7 +2,7 @@
 
 **Version:** 98253  
 **Runtime:** Isolated Resource Environment  
-**Language:** Lua 5.4 (FiveM)
+**Language:** Lua 5.4 
 
 ---
 
@@ -28,7 +28,7 @@
 
 ## Getting Started
 
-All Stealth API functions are accessed through `Stealth.FunctionName()`. You have full access to standard FiveM Lua functions (`Citizen.CreateThread`, `Wait`, `GetPlayerPed`, `GetEntityCoords`, etc.) alongside the Stealth API.
+All Stealth API functions are accessed through `Stealth.FunctionName()`.
 
 When executing scripts, you can choose where your code runs using the dropdown in the bottom-left of the Executor tab. **Isolated** runs your code in Stealth's own private environment — this is the default and recommended mode. **Resource** mode lets you pick a specific server resource to execute inside, giving you access to that resource's variables and event handlers (the Stealth API is not available in this mode). Both modes are explained below.
 
