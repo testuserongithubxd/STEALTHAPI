@@ -481,15 +481,38 @@ Stealth.AddNotification("Low health warning", Stealth.NOTIFY_WARNING)
 Stealth.AddNotification("Player nearby")  -- defaults to INFO
 ```
 
----
-
 ## Drawing & Images
 
-### `Stealth.DrawRect(x, y, w, h, r, g, b, a)`
+### ImGui Drawing
 
-Draws a filled rectangle. Same coordinate system as the native `DrawRect` — normalized screen space where `(0.5, 0.5)` is center.
+Draw commands render through the Stealth overlay (ImGui) — they are **not visible** in FiveM screenshots, screen shares, or server-side anti-cheat screen captures. All coordinates use normalized screen space (0.0–1.0).
 
-**Must be called every frame.**
+**Important:** Drawing must happen inside a `BeginDraw` / `EndDraw` pair every frame. If you skip `EndDraw`, nothing renders. If you skip `BeginDraw`, old frames stay on screen.
+
+#### `Stealth.BeginDraw()`
+
+Starts a new draw frame. Clears all pending draw commands. Call this at the top of your render loop every frame, even if you have nothing to draw.
+
+#### `Stealth.EndDraw()`
+
+Commits the current draw frame for rendering. Call this at the end of your render loop every frame. Everything between `BeginDraw` and `EndDraw` appears on screen until the next frame replaces it.
+
+```lua
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        Stealth.BeginDraw()
+        -- all draw calls go here
+        Stealth.EndDraw()
+    end
+end)
+```
+
+---
+
+#### `Stealth.DrawRect(x, y, w, h, r, g, b, a)`
+
+Draws a filled rectangle. Coordinates are normalized (0.0–1.0) where `(0.5, 0.5)` is screen center.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -501,61 +524,71 @@ Draws a filled rectangle. Same coordinate system as the native `DrawRect` — no
 | `a` | `number` | Alpha (0–255, optional, default 255) |
 
 ```lua
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        Stealth.DrawRect(0.5, 0.5, 0.2, 0.1, 0, 0, 0, 150)
-    end
-end)
+Stealth.DrawRect(0.5, 0.5, 0.2, 0.1, 0, 0, 0, 150)
 ```
 
 ---
 
-### `Stealth.LoadImage(url, w, h)`
+#### `Stealth.DrawLine(x1, y1, x2, y2, r, g, b, a, thickness)`
 
-Loads an image from a URL into the browser layer.
+Draws a line between two points.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `url` | `string` | Direct URL to image (PNG, JPG, GIF, SVG) |
-| `w` | `number` | Width in pixels (optional, default 256) |
-| `h` | `number` | Height in pixels (optional, default 256) |
-
-**Returns:** `table` — image handle (`{ id, imgId, url, w, h, visible, loaded }`), or `nil`
+| `x1, y1` | `number` | Start point (0.0–1.0) |
+| `x2, y2` | `number` | End point (0.0–1.0) |
+| `r, g, b` | `number` | Color (0–255 each) |
+| `a` | `number` | Alpha (0–255, optional, default 255) |
+| `thickness` | `number` | Line width in pixels (optional, default 1.0) |
 
 ```lua
-local logo = Stealth.LoadImage("https://example.com/logo.png", 128, 128)
+Stealth.DrawLine(0.3, 0.3, 0.7, 0.7, 255, 0, 0, 255, 2.0)
 ```
 
 ---
 
-### `Stealth.DrawImage(img, x, y, w, h, a)`
+#### `Stealth.DrawBox(x, y, w, h, r, g, b, a, thickness)`
 
-Positions and shows a loaded image. Uses pixel coordinates.
+Draws an outlined rectangle (4 lines). Same coordinate system as `DrawRect`.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `img` | `table` | Handle from `LoadImage` |
-| `x` | `number` | Left position (pixels) |
-| `y` | `number` | Top position (pixels) |
-| `w` | `number` | Width (pixels, optional) |
-| `h` | `number` | Height (pixels, optional) |
-| `a` | `number` | Alpha 0–255 (optional, default 255) |
-
-**Returns:** `boolean`
+| `x` | `number` | Center X (0.0–1.0) |
+| `y` | `number` | Center Y (0.0–1.0) |
+| `w` | `number` | Width (0.0–1.0) |
+| `h` | `number` | Height (0.0–1.0) |
+| `r, g, b` | `number` | Color (0–255 each) |
+| `a` | `number` | Alpha (0–255, optional, default 255) |
+| `thickness` | `number` | Line width in pixels (optional, default 1.0) |
 
 ```lua
-local img = Stealth.LoadImage("https://example.com/crosshair.png", 32, 32)
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        if img then
-            Stealth.DrawImage(img, 960 - 16, 540 - 16, 32, 32, 200)
-        end
-    end
-end)
+Stealth.DrawBox(0.5, 0.5, 0.1, 0.15, 51, 115, 230, 200, 1.0)
 ```
+
+---
+
+#### `Stealth.WorldToScreen(x, y, z)`
+
+Converts a 3D world position to normalized 2D screen coordinates. Uses the native `GetScreenCoordFromWorldCoord` internally.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `x, y, z` | `number` | World coordinates |
+
+**Returns:** `number, number` — screen X and Y (0.0–1.0), or `nil, nil` if the point is behind the camera.
+
+```lua
+local sx, sy = Stealth.WorldToScreen(100.0, 200.0, 30.0)
+if sx then
+    Stealth.DrawRect(sx, sy, 0.005, 0.008, 255, 0, 0, 255)
+end
+```
+
+---
+
+### CEF Images
+
+Images are rendered through FiveM's browser layer (CEF). Unlike ImGui drawing, these **may be visible** in screen captures.
 
 ---
 
@@ -898,6 +931,12 @@ end)
 | `Stealth.InjectResource(name, code)` | `boolean` | Execute code in another resource |
 | `Stealth.AddNotification(msg, type)` | `boolean` | Show notification |
 | `Stealth.DrawRect(x,y,w,h,r,g,b,a)` | — | Draw rectangle (per frame) |
+| `Stealth.BeginDraw()` | — | Start draw frame |
+| `Stealth.EndDraw()` | — | Commit draw frame |
+| `Stealth.DrawRect(x,y,w,h,r,g,b,a)` | — | Draw filled rectangle (per frame) |
+| `Stealth.DrawLine(x1,y1,x2,y2,r,g,b,a,t)` | — | Draw line (per frame) |
+| `Stealth.DrawBox(x,y,w,h,r,g,b,a,t)` | — | Draw outlined box (per frame) |
+| `Stealth.WorldToScreen(x,y,z)` | `number, number` | 3D to 2D screen coords |
 | `Stealth.LoadImage(url, w, h)` | `table` | Load image from URL |
 | `Stealth.DrawImage(img, x,y,w,h,a)` | `boolean` | Position/show image |
 | `Stealth.ExecuteJS(script)` | `boolean` | Run JS (fire & forget) |
