@@ -114,7 +114,7 @@ print("User ID: " .. uid)
 
 ## Native Hooking
 
-The hook system intercepts GTA V native function calls made by any resource on the client. When a hooked native is called, your callback fires and you can read arguments, modify the return value, or block the call entirely.
+The hook system intercepts native function calls made by any resource on the client. When a hooked native is called, your callback fires and you can read arguments, modify the return value, or block the call entirely.
 
 
 
@@ -126,7 +126,7 @@ Hooks a GTA V native by its hash. The callback fires every time any resource cal
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `hash` | `number` | The 64-bit native hash (e.g. `0x6D0DE6A7B5DA71F8` for `GetPlayerName`) |
+| `hash` | `number` | The 64-bit native hash (e.g. `0x6D0DE6A7B5DA71F8` for `GetPlayerName`) 32bit also works.|
 | `callback` | `function` | Your hook function — see return behavior below |
 
 **Returns:** `boolean` — `true` if the native exists and was hooked successfully, `false` if the hash is invalid, the native doesn't exist in the game
@@ -305,7 +305,7 @@ Reads a float argument from the currently executing hooked native call. **Only v
 **Returns:** `number` — the argument's float value as raw integer bits
 
 ```lua
-Stealth.HookNative(0x239528EACDC3E7DE, function()
+Stealth.HookNative(0x06843DA7060A026B, function()
     local x = Stealth.GetArgFloat(1)
     local y = Stealth.GetArgFloat(2)
     local z = Stealth.GetArgFloat(3)
