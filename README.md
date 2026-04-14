@@ -27,9 +27,10 @@
 
 ## Getting Started
 
-All Stealth API functions are available under the global `Stealth` table. Scripts run inside a dedicated resource that is created automatically when the cheat loads. You have full access to all standard FiveM Lua functions (`Citizen.CreateThread`, `Wait`, `GetPlayerPed`, `GetEntityCoords`, etc.) alongside the Stealth API.
+All Stealth API functions are accessed through `Stealth.FunctionName()`. You have full access to standard FiveM Lua functions (`Citizen.CreateThread`, `Wait`, `GetPlayerPed`, `GetEntityCoords`, etc.) alongside the Stealth API.
 
-There are two execution modes: **Isolated** (your own resource) and **Resource** (injecting into an existing server resource). Both are explained below.
+When executing scripts, you can choose where your code runs using the dropdown in the bottom-left of the Executor tab. **Isolated** runs your code in Stealth's own private environment — this is the default and recommended mode. **Resource** mode lets you pick a specific server resource to execute inside, giving you access to that resource's variables and event handlers (the Stealth API is not available in this mode). Both modes are explained below.
+
 
 **Your first script:**
 
@@ -61,7 +62,7 @@ Use this for: persistent scripts, native hooks, drawing, keybind systems, DUI ov
 
 Your code runs inside an existing server resource's Lua environment using `Stealth.InjectResource()`. This gives you access to that resource's local variables, functions, and event handlers. The Stealth API is **not** available inside injected code — only the target resource's own globals and standard FiveM functions.
 
-Use this for: accessing resource-specific data, calling resource-local functions, reading internal state, triggering resource-specific events.
+Use this for: accessing resource-specific data, calling resource-local functions using debug.getupvalue (can be hooked by the anticheat)
 
 ---
 
