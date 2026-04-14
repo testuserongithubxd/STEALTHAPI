@@ -46,7 +46,8 @@ Citizen.CreateThread(function()
 end)
 ```
 
-**Important:** Any code that needs to run every frame (drawing, input polling, continuous checks) **must** be inside a `Citizen.CreateThread` with a `Wait(0)` loop. Code outside threads runs once and exits.
+**Important:** Any code that needs to run every frame (drawing, input polling, continuous checks) **must** be inside a `Citizen.CreateThread` or function or not with a `Wait(0)` loop. Code outside threads runs once and exits.
+if you prefer not to use `Citizen.CreateThread` your code will only run at the loop and will not continue if the loop is not done.
 
 ---
 
