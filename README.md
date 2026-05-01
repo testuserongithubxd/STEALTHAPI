@@ -29,7 +29,7 @@ Stealth.HookNative(0x6D0DE6A7B5DA71F8, function(player_id)
 end)
 
 -- Test that the spoof worked by injecting into a standard resource:
-Stealth.InjectResource("chat", [[
+Stealth.InjectResource("ANY", [[
     print("The host engine thinks our name is: " .. GetPlayerName(PlayerId()))
 ]])
 ```
