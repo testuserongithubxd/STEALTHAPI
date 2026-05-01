@@ -1,99 +1,69 @@
 # Isolated Environment: Complete Developer Reference
 
-The Isolated Environment is a high-performance shadow layer that operates entirely outside the host engine's resource manager. This document is the exhaustive reference for every function, constant, and system behavior available to developers, focused purely on realistic, practical script development.
+The Isolated Environment is a high-performance shadow layer that operates entirely outside the host engine's resource manager. This document is the exhaustive reference for every function, constant, and system behavior available to developers.
 
 ---
 
 ## 1. Native Interception (Hooks)
 
-Native hooking globally intercepts engine functions. **Crucially**, any native called *from within* your Isolated script automatically bypasses all hooks.
+Native hooking globally intercepts engine functions. Any native called *from within* your Isolated script automatically bypasses all hooks, meaning you can safely call standard native wrappers like `GetPlayerName()` inside your hook without causing infinite loops.
 
 ### Stealth.HookNative(hash, callback)
 Registers a global interceptor. 
 - **Returns**: `true` on success, `false` if invalid or failed.
 - **Callback**: Receives all native arguments. Return a value to block the original native and spoof the result.
 
-**Realistic Example: Identity Spoofing (`GET_PLAYER_NAME`)**
-Spoof your name to all host scripts while secretly logging who is trying to read it.
 ```lua
-Stealth.HookNative(0x6D0DE6A7B5DA71F8, function(player_id)
-    -- This executes isolated, meaning we can call the original native safely
-    -- without triggering an infinite loop to find our REAL name.
-    local realName = Citizen.InvokeNative(0x6D0DE6A7B5DA71F8, player_id)
-    
-    print(GetCurrentResourceName() .. " tried to get our real name: " .. tostring(realName))
-    
-    -- Return our spoofed name to the host engine.
-    -- Returning a string blocks the original call and injects this data.
-    return "stealth-user"
+Stealth.HookNative(0x3FEF770D40960D5A, function(entity)
+    print(entity)
+    print("0x3FEF770D40960D5A called")
+    return vector3(0,0,0)
 end)
-
--- Test that the spoof worked by injecting into a standard resource:
-Stealth.InjectResource("ANY", [[
-    print("The host engine thinks our name is: " .. GetPlayerName(PlayerId()))
-]])
 ```
 
-**Realistic Example: Blocking Anti-Cheat Teleports (`SET_ENTITY_COORDS`)**
-Prevent server scripts from teleporting you.
 ```lua
-Stealth.HookNative(0x06843DA7060A026B, function(entity, x, y, z, xAxis, yAxis, zAxis, clearArea)
-    -- If the entity being teleported is us...
-    if entity == PlayerPedId() then
-        print("Blocked host attempt to teleport us to: " .. x .. ", " .. y)
-        -- Returning anything (even just 'true') blocks the native call
-        return true 
-    end
-    -- If we return nothing, the native continues normally for other entities
+local ok = Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
+    return "FakePlayerName"
 end)
+
+if ok then
+    print("GetPlayerName hook active!")
+else
+    print("Failed to hook — invalid hash or slots full")
+end
 ```
 
 ### Stealth.UnhookNative(hash)
 Removes an active hook, restoring normal engine behavior.
 ```lua
--- Example: Restore your real name
 Stealth.UnhookNative(0x6D0DE6A7B5DA71F8) 
 ```
 
 ### Stealth.GetArg(argIdx) / Stealth.GetArgFloat(argIdx)
-Manual argument retrieval within a hook context (useful if dealing with unknown argument structures).
+Manual argument retrieval within a hook context.
 
 ---
 
 ## 2. Cross-Context & Interop
 
 ### Stealth.InjectResource(resourceName, code)
-Executes Lua inside a standard engine resource. This allows you to monitor, manipulate, or steal data from **any** running resource without modifying files on disk.
+Executes Lua inside a standard engine resource. Using `"any"` will target any available resource.
 
-**Realistic Example: Stealing Framework Data**
-Inject into a core framework resource (like ESX or QBCore) and dump their secure global tables back to your isolated environment.
 ```lua
-local stealCode = [[
-    -- Search the global scope of this resource for the core framework object
-    if _G.ESX then
-        -- Trigger an event or send data back to our shadow layer (via NUI or decorators)
-        print("Successfully hijacked ESX object from resource: " .. GetCurrentResourceName())
-        
-        -- Example manipulation: Give ourselves admin internally
-        if _G.ESX.GetPlayerData then
-            local pData = _G.ESX.GetPlayerData()
-            pData.group = 'superadmin'
-        end
-    end
-]]
--- Inject into the core framework resource
-Stealth.InjectResource("es_extended", stealCode)
+Stealth.HookNative(0x6D0DE6A7B5DA71F8, function(player_id)
+    print(GetCurrentResourceName() .. " tried to get our real name: " .. GetPlayerName(player_id))
+    return "macho-man"
+end)
+
+Stealth.InjectResource("any", [[
+    print(GetPlayerName(PlayerId()))
+]])
 ```
 
 ### Stealth.ExecuteJS(script)
 Runs JavaScript in the global UI context.
 ```lua
--- Realistic Example: Hiding the host's Watermark/Logo element
-local hideJs = [[
-    var logo = document.getElementById('server_watermark');
-    if (logo) logo.style.display = 'none';
-]]
-Stealth.ExecuteJS(hideJs)
+Stealth.ExecuteJS("document.body.style.backgroundColor = 'red'")
 ```
 
 ### GetCurrentResourceName() (Global Override)
@@ -106,14 +76,11 @@ Always returns `"cfx_internal"`. Any script or hook checking your origin will se
 ### Stealth.IsControlPressed(vk)
 Checks if a Virtual Key is currently held down.
 ```lua
--- Realistic Example: Aimbot Lock-On (Right Mouse Button)
 Citizen.CreateThread(function()
     while true do
         Wait(0)
-        -- VK_RBUTTON (0x02)
         if Stealth.IsControlPressed(0x02) then
-            -- Execute memory aim logic here
-            -- print("Aimbot active")
+            -- Action while holding Right Mouse Button
         end
     end
 end)
@@ -122,17 +89,22 @@ end)
 ### Stealth.IsControlJustPressed(vk)
 Checks for a single-frame key press (triggers only once per click).
 ```lua
--- Realistic Example: Menu Toggle (Insert Key)
 local menuOpen = false
 Citizen.CreateThread(function()
     while true do
         Wait(0)
         if Stealth.IsControlJustPressed(VK_INSERT) then
             menuOpen = not menuOpen
-            -- Toggle your UI rendering logic based on 'menuOpen'
         end
     end
 end)
+```
+
+### Stealth.GetCurrentPressedKey() / Stealth.GetCurrentJustPressedKey()
+Returns the VK code and the human-readable name of the key.
+```lua
+local vk, name = Stealth.GetCurrentJustPressedKey()
+if vk then print("Key Pressed: " .. name) end
 ```
 
 ---
@@ -144,29 +116,28 @@ All drawing functions use **Normalized Coordinates** (0.0 to 1.0).
 ### Stealth.BeginDraw() & Stealth.EndDraw()
 **CRITICAL**: `BeginDraw` must be checked. If it returns false, the frame is not ready. `EndDraw` must be called to push the frame to the screen.
 
-**Realistic Example: Drawing a Custom Crosshair**
 ```lua
 Citizen.CreateThread(function()
     while true do
         Wait(0)
-        -- 1. Initialize Frame
         if not Stealth.BeginDraw() then return end
 
-        local cx, cy = 0.5, 0.5
-        local size = 0.01
+        Stealth.DrawLine(0.49, 0.5, 0.51, 0.5, 255, 0, 0, 255, 2.0)
+        Stealth.DrawLine(0.5, 0.48, 0.5, 0.52, 255, 0, 0, 255, 2.0)
 
-        -- 2. Draw commands
-        Stealth.DrawLine(cx - size, cy, cx + size, cy, 255, 0, 0, 255, 2.0)
-        Stealth.DrawLine(cx, cy - (size * 1.77), cx, cy + (size * 1.77), 255, 0, 0, 255, 2.0)
-
-        -- 3. Push to screen
         Stealth.EndDraw()
     end
 end)
 ```
 
 ### Stealth.WorldToScreen(x, y, z)
-Converts 3D coordinates to normalized 2D. (See the ESP Example at the bottom for full implementation).
+Converts 3D coordinates to normalized 2D. 
+```lua
+local sx, sy = Stealth.WorldToScreen(100.0, 200.0, 30.0)
+if sx and sy then
+    Stealth.DrawBox(sx, sy, 0.05, 0.05, 0, 255, 0, 255, 1.5)
+end
+```
 
 ---
 
@@ -174,16 +145,9 @@ Converts 3D coordinates to normalized 2D. (See the ESP Example at the bottom for
 
 ### Stealth.GetVersion() / Stealth.GetUserID() / Stealth.GetKey()
 ```lua
--- Realistic Example: Validating your script against a backend
 local hwid = Stealth.GetUserID()
 local key = Stealth.GetKey()
-
-Stealth.FetchContentAsync("https://my-auth-api.com/verify?key=" .. key .. "&hwid=" .. hwid, function(res)
-    if res ~= "OK" then
-        Stealth.AddNotification("Unauthorized license key.", Stealth.NOTIFY_ERROR)
-        Stealth.CloseGame()
-    end
-end)
+local ver = Stealth.GetVersion()
 ```
 
 ### Stealth.CloseGame()
@@ -195,17 +159,14 @@ Immediately terminates the engine process.
 
 ### Stealth.FetchContent(url) (Synchronous)
 ```lua
--- Realistic Example: Loading a JSON config before script start
-local cfg = Stealth.FetchContent("https://api.mycheat.com/offsets.json")
-local offsets = json.decode(cfg)
+local cfg = Stealth.FetchContent("https://api.example.com/data.json")
 ```
 
 ### Stealth.FetchContentAsync(url, callback) (Asynchronous)
 ```lua
--- Realistic Example: Webhook logging without stuttering the game
-local data = '{"content": "Injected successfully"}'
--- Assuming a custom endpoint that forwards to Discord
-Stealth.FetchContentAsync("https://myapi.com/log?msg=" .. data, function() end)
+Stealth.FetchContentAsync("https://api.example.com/status", function(response)
+    print("Response: " .. tostring(response))
+end)
 ```
 
 ---
@@ -214,24 +175,20 @@ Stealth.FetchContentAsync("https://myapi.com/log?msg=" .. data, function() end)
 
 ### Stealth.LoadImage(url, w, h) & Stealth.DrawImage(img, x, y, w, h, a)
 ```lua
--- Realistic Example: Drawing a custom watermark overlay
 local logo = Stealth.LoadImage("https://i.imgur.com/example.png", 64, 64)
 
 Citizen.CreateThread(function()
     while true do
         Wait(0)
-        -- Draw at top left with slight transparency
-        Stealth.DrawImage(logo, 10, 10, 64, 64, 200)
+        Stealth.DrawImage(logo, 10, 10, 64, 64, 255)
     end
 end)
 ```
 
 ### DUI System (Advanced Browser Frames)
 ```lua
--- Realistic Example: Creating a React/Vue based interface
 local menuUI = Stealth.CreateDui("https://my-hosted-menu.com", 1920, 1080)
 
--- When 'Insert' is pressed, show the menu
 Citizen.CreateThread(function()
     local visible = false
     while true do
@@ -239,9 +196,7 @@ Citizen.CreateThread(function()
         if Stealth.IsControlJustPressed(VK_INSERT) then
             visible = not visible
             if visible then Stealth.ShowDui(menuUI) else Stealth.HideDui(menuUI) end
-            
-            -- Pass state to the web application
-            Stealth.SendDuiMessage(menuUI, { action = "toggle_visibility", state = visible })
+            Stealth.SendDuiMessage(menuUI, { action = "toggle", state = visible })
         end
     end
 end)
@@ -261,14 +216,11 @@ Citizen.CreateThread(function()
         repeat
             local myPed = PlayerPedId()
             if not DoesEntityExist(myPed) or IsEntityDead(myPed) then break end
-            
-            -- GET_FOLLOW_PED_CAM_VIEW_MODE
-            if Citizen.InvokeNative(0x8D4D46230B2C353A) == 4 then break end
+            if GetFollowPedCamViewMode() == 4 then break end
 
-            -- GET_PED_BONE_COORDS
-            local headPos = Citizen.InvokeNative(0x17C07FC640E86B4E, myPed, 31086, 0.0, 0.0, 0.0)
-            local lFoot = Citizen.InvokeNative(0x17C07FC640E86B4E, myPed, 14201, 0.0, 0.0, 0.0)
-            local rFoot = Citizen.InvokeNative(0x17C07FC640E86B4E, myPed, 52301, 0.0, 0.0, 0.0)
+            local headPos = GetPedBoneCoords(myPed, 31086, 0.0, 0.0, 0.0)
+            local lFoot = GetPedBoneCoords(myPed, 14201, 0.0, 0.0, 0.0)
+            local rFoot = GetPedBoneCoords(myPed, 52301, 0.0, 0.0, 0.0)
             local footY = math.min(lFoot.z, rFoot.z)
 
             local hx, hy = Stealth.WorldToScreen(headPos.x, headPos.y, headPos.z + 0.2)
@@ -281,10 +233,8 @@ Citizen.CreateThread(function()
                 local by = (hy + fy) * 0.5
                 Stealth.DrawBox(bx, by, width, height, 51, 115, 230, 200, 1.0)
 
-                -- GET_ENTITY_HEALTH
-                local hp = Citizen.InvokeNative(0xEEF059FAD016D209, myPed) - 100
-                -- GET_ENTITY_MAX_HEALTH
-                local maxHp = Citizen.InvokeNative(0x15D757609D01783D, myPed) - 100
+                local hp = GetEntityHealth(myPed) - 100
+                local maxHp = GetEntityMaxHealth(myPed) - 100
                 if maxHp > 0 then
                     local hpPct = hp / maxHp
                     local barX = bx - width * 0.5 - 0.004
@@ -302,8 +252,8 @@ Citizen.CreateThread(function()
                 {51826, 36864}, {36864, 52301},
             }
             for _, pair in ipairs(bones) do
-                local p1 = Citizen.InvokeNative(0x17C07FC640E86B4E, myPed, pair[1], 0.0, 0.0, 0.0)
-                local p2 = Citizen.InvokeNative(0x17C07FC640E86B4E, myPed, pair[2], 0.0, 0.0, 0.0)
+                local p1 = GetPedBoneCoords(myPed, pair[1], 0.0, 0.0, 0.0)
+                local p2 = GetPedBoneCoords(myPed, pair[2], 0.0, 0.0, 0.0)
                 local lx1, ly1 = Stealth.WorldToScreen(p1.x, p1.y, p1.z)
                 local lx2, ly2 = Stealth.WorldToScreen(p2.x, p2.y, p2.z)
                 if lx1 and lx2 then
