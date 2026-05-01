@@ -1,74 +1,57 @@
-# Isolated Environment: Complete API Reference
+# Isolated Environment: Definitive Technical Guide
 
-The Isolated Environment is a detached execution layer that operates independently of the host engine's resource manager. This document provides a comprehensive reference for every available function in the API.
+The Isolated Environment is a specialized, shadow-layer execution context that operates detached from the host engine's resource manager. This document provides an exhaustive, detailed reference for every API function, accompanied by practical examples and architectural explanations.
 
 ---
 
-## 1. System & Authentication
+## 1. Core Architecture & Philosophy
 
-### Stealth.GetVersion()
-Retrieves the internal build version of the Isolated Environment.
-```lua
-local version = Stealth.GetVersion()
-print("Running version: " .. version)
-```
+The environment operates as a **Shadow Layer**. It is not a standard resource and cannot be detected by enumeration scripts or management tools. 
 
-### Stealth.GetUserID()
-Retrieves a unique, hardware-linked identifier for the current user.
-```lua
-local id = Stealth.GetUserID()
-print("Your unique hardware ID: " .. id)
-```
-
-### Stealth.GetKey()
-Retrieves the license key currently used by the session.
-```lua
-local key = Stealth.GetKey()
-print("Active Session Key: " .. key)
-```
-
-### Stealth.CloseGame()
-Immediately terminates the engine process. Useful for emergency security protocols.
-```lua
-if some_security_breach then
-    Stealth.CloseGame()
-end
-```
+- **Detached Lifecycle**: Variables, threads, and handlers are isolated.
+- **Hook Bypass**: Native calls within this environment bypass all host-side hooks, ensuring you see the "True Engine State."
+- **Invisibility**: The environment is invisible to the host's task lists and resource manifests.
 
 ---
 
 ## 2. Native Interception (Hooking)
 
+Native hooking allows you to globally intercept engine functions. This is the primary method for modifying engine behavior without patching memory.
+
 ### Stealth.HookNative(hash, callback)
-Intercepts an engine native globally. If the callback returns a value, the original call is blocked.
+Registers a global interceptor for a native hash. 
+
+- **Returns**: `true` on success, `false` if the native hash is invalid or the hook failed.
+- **Argument Handling**: The `callback` receives all arguments passed to the native by the host engine. You can name these arguments or use `...` to capture them.
+
+**Example: Detailed Interception**
 ```lua
-Stealth.HookNative(0x3FEF770D40960D5A, function(entity)
-    print("Intercepted native for entity: " .. entity)
-    return vector3(0.0, 0.0, 0.0) -- Block and return custom vector
+-- Hooking a property check native
+local ok = Stealth.HookNative(0x3FEF770D40960D5A, function(entity)
+    print("Native 0x3FEF770D40960D5A was called!")
+    print("Entity Handle: " .. tostring(entity))
+    
+    -- Returning a value blocks the original engine call and returns this to the host
+    return vector3(0.0, 0.0, 0.0)
 end)
+
+if not ok then
+    print("Failed to hook native: Hash might be invalid or protected.")
+end
 ```
 
 ### Stealth.UnhookNative(hash)
-Removes a registered native hook by its hash.
+Removes an active hook and restores the original engine behavior.
 ```lua
 Stealth.UnhookNative(0x3FEF770D40960D5A)
 ```
 
-### Stealth.GetArg(argIdx)
-Retrieves an integer argument from the currently intercepted native call.
+### Stealth.GetArg(argIdx) / Stealth.GetArgFloat(argIdx)
+Alternative method to retrieve arguments inside a hook if you prefer manual indexing.
 ```lua
 Stealth.HookNative(0xABC123..., function(...)
     local firstArg = Stealth.GetArg(0)
-    print("Argument 0 is: " .. firstArg)
-end)
-```
-
-### Stealth.GetArgFloat(argIdx)
-Retrieves a float argument from the currently intercepted native call.
-```lua
-Stealth.HookNative(0xDEF456..., function(...)
-    local floatArg = Stealth.GetArgFloat(1)
-    print("Argument 1 is: " .. floatArg)
+    local secondArg = Stealth.GetArgFloat(1)
 end)
 ```
 
@@ -76,141 +59,131 @@ end)
 
 ## 3. Visuals & Viewport Rendering
 
+The rendering system provides direct viewport access. It uses a **Normalized Coordinate System** (0.0 to 1.0) and a **Frame-Based Pipeline**.
+
 ### Stealth.BeginDraw()
-Initializes a new rendering frame. Must be called before any drawing primitives.
-```lua
-if Stealth.BeginDraw() then
-    -- draw calls here
-    Stealth.EndDraw()
-end
-```
+Starts a new rendering frame. This is **CRITICAL**:
+- Always check the return value. If it returns `false`, the rendering context is not ready (e.g., during engine transitions).
+- It resets the internal command buffer for the new frame.
 
 ### Stealth.EndDraw()
-Finalizes the current rendering frame and pushes all queued commands to the display.
-```lua
-Stealth.EndDraw()
-```
+Finalizes the current frame and pushes all queued commands to the engine's compositing buffer.
+- Without calling this, **nothing will appear on screen**.
 
-### Stealth.DrawRect(x, y, w, h, r, g, b, a)
-Draws a filled rectangle using normalized coordinates (0.0 to 1.0).
-```lua
-Stealth.DrawRect(0.5, 0.5, 0.1, 0.1, 255, 0, 0, 255)
-```
+### Rendering Primitives
+- `Stealth.DrawRect(x, y, w, h, r, g, b, a)`: Filled rectangle.
+- `Stealth.DrawLine(x1, y1, x2, y2, r, g, b, a, thickness)`: Vector line.
+- `Stealth.DrawBox(x, y, w, h, r, g, b, a, thickness)`: Outlined box centered at (X, Y).
+- `Stealth.WorldToScreen(x, y, z)`: Returns `sx, sy` (normalized) if the point is on screen, or `nil` if off-screen.
 
-### Stealth.DrawLine(x1, y1, x2, y2, r, g, b, a, thickness)
-Draws a line between two normalized points.
-```lua
-Stealth.DrawLine(0.0, 0.0, 1.0, 1.0, 0, 255, 0, 255, 2.0)
-```
+---
 
-### Stealth.DrawBox(x, y, w, h, r, g, b, a, thickness)
-Draws an outlined box (wireframe rectangle) centered at X, Y.
-```lua
-Stealth.DrawBox(0.5, 0.5, 0.2, 0.2, 255, 255, 0, 255, 1.5)
-```
+## 4. Advanced "Real-World" Examples
 
-### Stealth.WorldToScreen(x, y, z)
-Converts 3D world coordinates to 2D normalized screen coordinates.
-```lua
-local sx, sy = Stealth.WorldToScreen(100.0, 200.0, 30.0)
-if sx then
-    Stealth.DrawRect(sx, sy, 0.01, 0.01, 255, 255, 255, 255)
-end
-```
+### Full Script: Self-ESP (Skeleton & Health)
+This example demonstrates a complete rendering loop, including world-to-screen projection, skeleton bone mapping, and health bar rendering.
 
-### Stealth.LoadImage(url, w, h)
-Asynchronously loads an image from a URL into the UI context.
 ```lua
-local myImg = Stealth.LoadImage("https://example.com/logo.png", 100, 100)
-```
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        
+        -- 1. Initialize the frame. Always check return!
+        if not Stealth.BeginDraw() then return end
 
-### Stealth.DrawImage(img, x, y, w, h, a)
-Renders a previously loaded image at the specified pixel coordinates.
-```lua
-Stealth.DrawImage(myImg, 10, 10, 50, 50, 255)
+        repeat
+            local myPed = PlayerPedId()
+            if not DoesEntityExist(myPed) or IsEntityDead(myPed) then break end
+            
+            -- Don't draw in first person
+            if GetFollowPedCamViewMode() == 4 then break end
+
+            -- Calculate Screen Coordinates for Box
+            local headPos = GetPedBoneCoords(myPed, 31086, 0.0, 0.0, 0.0)
+            local lFoot = GetPedBoneCoords(myPed, 14201, 0.0, 0.0, 0.0)
+            local rFoot = GetPedBoneCoords(myPed, 52301, 0.0, 0.0, 0.0)
+            local footY = math.min(lFoot.z, rFoot.z)
+
+            local hx, hy = Stealth.WorldToScreen(headPos.x, headPos.y, headPos.z + 0.2)
+            local fx, fy = Stealth.WorldToScreen(headPos.x, headPos.y, footY - 0.1)
+
+            if hx and fx then
+                local height = math.abs(fy - hy)
+                local width = height * 0.35
+                local bx = (hx + fx) * 0.5
+                local by = (hy + fy) * 0.5
+                
+                -- Draw the main ESP box
+                Stealth.DrawBox(bx, by, width, height, 51, 115, 230, 200, 1.0)
+
+                -- Draw Health Bar
+                local hp = GetEntityHealth(myPed) - 100
+                local maxHp = GetEntityMaxHealth(myPed) - 100
+                if maxHp > 0 then
+                    local hpPct = hp / maxHp
+                    local barX = bx - width * 0.5 - 0.004
+                    local barH = height * hpPct
+                    local barY = fy - barH
+                    Stealth.DrawRect(barX, barY + barH * 0.5, 0.003, barH, 50, 205, 50, 200)
+                end
+            end
+
+            -- Skeleton Rendering
+            local bones = {
+                {31086, 39317}, {39317, 45509}, {45509, 61163}, {61163, 18905},
+                {39317, 40269}, {40269, 28252}, {28252, 57005}, {39317, 24818},
+                {24818, 24817}, {24817, 24816}, {24816, 23553}, {23553, 11816},
+                {11816, 58271}, {58271, 63931}, {63931, 14201}, {11816, 51826}, 
+                {51826, 36864}, {36864, 52301},
+            }
+            for _, pair in ipairs(bones) do
+                local p1 = GetPedBoneCoords(myPed, pair[1], 0.0, 0.0, 0.0)
+                local p2 = GetPedBoneCoords(myPed, pair[2], 0.0, 0.0, 0.0)
+                local lx1, ly1 = Stealth.WorldToScreen(p1.x, p1.y, p1.z)
+                local lx2, ly2 = Stealth.WorldToScreen(p2.x, p2.y, p2.z)
+                if lx1 and lx2 then
+                    Stealth.DrawLine(lx1, ly1, lx2, ly2, 255, 255, 255, 180, 1.0)
+                end
+            end
+        until true
+
+        -- 2. Push commands to viewport. Stops everything if omitted!
+        Stealth.EndDraw()
+    end
+end)
 ```
 
 ---
 
-## 4. Input & Controls
-
-### Stealth.IsControlPressed(vk)
-Checks if a specific Virtual Key is currently held down.
-```lua
-if Stealth.IsControlPressed(VK_LSHIFT) then
-    -- Logic for shift key
-end
-```
-
-### Stealth.IsControlJustPressed(vk)
-Checks if a Virtual Key was pressed in the current frame.
-```lua
-if Stealth.IsControlJustPressed(VK_INSERT) then
-    menu_open = not menu_open
-end
-```
-
-### Stealth.GetCurrentPressedKey()
-Returns the VK code and name of any key currently being held.
-```lua
-local vk, name = Stealth.GetCurrentPressedKey()
-if vk then print("Holding: " .. name) end
-```
-
-### Stealth.GetCurrentJustPressedKey()
-Returns the VK code and name of the key pressed in the current frame.
-```lua
-local vk, name = Stealth.GetCurrentJustPressedKey()
-if vk then print("Just Pressed: " .. name) end
-```
-
----
-
-## 5. Networking & Cross-Context
+## 5. Additional System Functions
 
 ### Stealth.FetchContent(url)
-Asynchronously fetches text content from a URL.
+Asynchronous web requests. 
 ```lua
-local data = Stealth.FetchContent("https://api.myapp.com/v1/config")
-if data then
-    local config = json.decode(data)
-end
-```
-
-### Stealth.ExecuteJS(js)
-Executes a string of JavaScript in the engine's underlying UI browser context.
-```lua
-Stealth.ExecuteJS("window.location.reload()")
+local data = Stealth.FetchContent("https://api.example.com")
 ```
 
 ### Stealth.InjectResource(resourceName, code)
-Injects a string of Lua code into a target engine resource.
+Executes code in a standard engine resource context.
 ```lua
-local patch = "print('Resource has been patched!')"
-Stealth.InjectResource("map_manager", patch)
+Stealth.InjectResource("chat", "print('Hello from Shadow Layer!')")
 ```
 
 ### Stealth.AddNotification(msg, type)
-Pushes a notification to the internal UI.
-**Types:** 0: Info, 1: Success, 2: Warning, 3: Error.
+Pushes a system notification (0: Info, 1: Success, 2: Warning, 3: Error).
 ```lua
-Stealth.AddNotification("Script Loaded", 1)
+Stealth.AddNotification("Script Initialized", 1)
+```
+
+### Stealth.ExecuteJS(js)
+Direct JavaScript injection into the engine's browser context.
+```lua
+Stealth.ExecuteJS("document.body.style.backgroundColor = 'red'")
 ```
 
 ---
 
-## 6. API Constants Reference
+## 6. Constants Reference
 
-### Notification Types
-- `Stealth.NOTIFY_INFO` (0)
-- `Stealth.NOTIFY_SUCCESS` (1)
-- `Stealth.NOTIFY_WARNING` (2)
-- `Stealth.NOTIFY_ERROR` (3)
-
-### Common Virtual Key Codes
-- `VK_LSHIFT`, `VK_RSHIFT`
-- `VK_LCONTROL`, `VK_RCONTROL`
-- `VK_LMENU` (ALT)
-- `VK_INSERT`, `VK_DELETE`, `VK_HOME`, `VK_END`
-- `VK_F1` through `VK_F12`
-- `VK_LBUTTON` (Mouse1), `VK_RBUTTON` (Mouse2)
+- `Stealth.NOTIFY_INFO` (0), `Stealth.NOTIFY_SUCCESS` (1), `Stealth.NOTIFY_WARNING` (2), `Stealth.NOTIFY_ERROR` (3)
+- Common VK Codes: `VK_LSHIFT`, `VK_CONTROL`, `VK_INSERT`, `VK_DELETE`, `VK_F1`-`VK_F12`.
