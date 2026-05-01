@@ -1,948 +1,216 @@
-# Project Stealth — Lua API Documentation
+# Isolated Environment: Complete API Reference
 
-**Version:** 98253  
-**Runtime:** Isolated Resource Environment  
-**Language:** Lua 5.4 
+The Isolated Environment is a detached execution layer that operates independently of the host engine's resource manager. This document provides a comprehensive reference for every available function in the API.
 
 ---
 
-## Table of Contents
+## 1. System & Authentication
 
-1. [Getting Started](#getting-started)
-2. [Execution Modes](#execution-modes)
-3. [Identity & Authentication](#identity--authentication)
-4. [Native Hooking](#native-hooking)
-   - [Isolated Resource Bypass](#isolated-resource-bypass)
-5. [Input System](#input-system)
-6. [Resource Injection](#resource-injection)
-7. [Notifications](#notifications)
-8. [Drawing & Images](#drawing--images)
-9. [JavaScript Execution](#javascript-execution)
-10. [DUI System (Dynamic UI)](#dui-system-dynamic-ui)
-11. [HTTP Requests](#http-requests)
-12. [Virtual Key Constants](#virtual-key-constants)
-13. [Complete Examples](#complete-examples)
-14. [Quick Reference](#quick-reference)
-
----
-
-## Getting Started
-
-All Stealth API functions are accessed through `Stealth.FunctionName()`.
-
-When executing scripts, you can choose where your code runs using the dropdown in the bottom-left of the Executor tab. **Isolated** runs your code in Stealth's own private environment — this is the default and recommended mode. **Resource** mode lets you pick a specific server resource to execute inside, giving you access to that resource's variables and event handlers (the Stealth API is not available in this mode). Both modes are explained below.
-
-
-**Your first script:**
-
+### Stealth.GetVersion()
+Retrieves the internal build version of the Isolated Environment.
 ```lua
-print("Stealth version: " .. Stealth.GetVersion())
-print("User ID: " .. Stealth.GetUserID())
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        -- Your per-frame logic here
-    end
-end)
+local version = Stealth.GetVersion()
+print("Running version: " .. version)
 ```
 
-**Important:** Any code that needs to run every frame (drawing, input polling, continuous checks) **must** be inside a `Citizen.CreateThread` or function or not with a `Wait(0)` loop. Code outside threads runs once and exits.
-if you prefer not to use `Citizen.CreateThread` your code will only run at the loop and will not continue if the loop is not done.
-
----
-
-## Execution Modes
-
-### Isolated Resource
-
-Your code runs inside Stealth's own private resource. This is the default mode when you type code in the editor and press Execute. You have full access to the Stealth API and all client-side natives. Other resources on the server cannot see your code.
-
-Use this for: persistent scripts, native hooks, drawing, keybind systems, DUI overlays, anything that needs the Stealth API.
-
-### Resource Injection
-
-Your code runs inside an existing server resource's Lua environment using `Stealth.InjectResource()`. This gives you access to that resource's local variables, functions, and event handlers. The Stealth API is **not** available inside injected code — only the target resource's own globals and standard game functions.
-
-Use this for: accessing resource-specific data, calling resource-local functions using debug.getupvalue (can be hooked by the anticheat)
-
----
-
-## Identity & Authentication
-
-### `Stealth.GetVersion()`
-
-Returns the current Stealth build version as an integer.
-
-**Returns:** `number` — version identifier
-
+### Stealth.GetUserID()
+Retrieves a unique, hardware-linked identifier for the current user.
 ```lua
-local ver = Stealth.GetVersion()
-print("Running Stealth v" .. ver)
--- Output: Running Stealth v98253
+local id = Stealth.GetUserID()
+print("Your unique hardware ID: " .. id)
 ```
 
----
-
-### `Stealth.GetKey()`
-
-Returns the user's license key as a string.
-
-**Returns:** `string` — license key
-
-**Alias:** `Stealth.getAuthKey()`
-
+### Stealth.GetKey()
+Retrieves the license key currently used by the session.
 ```lua
 local key = Stealth.GetKey()
-print("License: " .. key)
+print("Active Session Key: " .. key)
 ```
 
----
-
-### `Stealth.GetUserID()`
-
-Returns a unique numeric identifier derived from your license key. The same key always produces the same ID.
-
-**Returns:** `number` — unique user ID
-
+### Stealth.CloseGame()
+Immediately terminates the engine process. Useful for emergency security protocols.
 ```lua
-local uid = Stealth.GetUserID()
-print("User ID: " .. uid)
-```
-
----
-
-## Native Hooking
-
-The hook system intercepts native function calls made by any resource on the client. When a hooked native is called, your callback fires and you can read arguments, modify the return value, or block the call entirely.
-
-
-
-### `Stealth.HookNative(hash, callback)`
-
-Hooks a native by its hash. The callback fires every time any resource calls that native.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `hash` | `number` | The 64-bit native hash (e.g. `0x6D0DE6A7B5DA71F8` for `GetPlayerName`) 32bit also works.|
-| `callback` | `function` | Your hook function — see return behavior below |
-
-**Returns:** `boolean` — `true` if the native exists and was hooked successfully, `false` if the hash is invalid, the native doesn't exist in the game
-
-#### Callback Return Behavior
-
-What you return from the callback controls the native's behavior:
-
-| Return | Effect |
-|--------|--------|
-| *(nothing)* | **Passthrough** — native runs normally, result untouched |
-| `number` | **Replace integer result** — blocks original, returns your number |
-| `"string"` | **Replace string result** — blocks original, returns your string |
-| `vector3(x,y,z)` | **Replace vector3 result** — blocks original, returns your vector |
-| `{x, y, z}` | **Replace vector3 via table** — table with 3+ numbers |
-| `x, y, z` | **Replace vector3 via multi-return** — three number values |
-| `false` | **Block only** — blocks the native, returns nothing |
-
-#### Example — Spoof player name (string return)
-
-```lua
-local ok = Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    return "FakePlayerName"
-end)
-
-if ok then
-    print("GetPlayerName hook active!")
-else
-    print("Failed to hook — invalid hash or slots full")
-end
-
--- Verify it works
-Wait(500)
-print("My name is now: " .. GetPlayerName(PlayerId()))
--- Output: My name is now: FakePlayerName
-```
-
-#### Example — Spoof entity position (vector3 return)
-
-```lua
-Stealth.HookNative(0x3FEF770D40960D5A, function()
-    return vector3(100.0, 200.0, 30.0)
-end)
-```
-
-#### Example — Spoof health (integer return)
-
-```lua
-Stealth.HookNative(0xEEF5F7E536AB0E37, function()
-    return 200
-end)
-```
-
-#### Example — Log calls without modifying (passthrough)
-
-```lua
-Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    local entity = Stealth.GetArg(0)
-    print("GetPlayerName called for entity: " .. entity)
-    -- Return nothing = native runs normally, result unchanged
-end)
-```
-
-#### Example — Block a native entirely
-
-```lua
-Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    return false
-end)
-```
-
-#### Example — Validate before continuing
-
-```lua
-local hooked = Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    return "spoofed-name"
-end)
-
-if hooked then
-    Stealth.AddNotification("Hook installed!", Stealth.NOTIFY_SUCCESS)
-else
-    Stealth.AddNotification("Hook failed! Check your hash.", Stealth.NOTIFY_ERROR)
+if some_security_breach then
+    Stealth.CloseGame()
 end
 ```
 
-#### Example — Invalid hash returns false
-
-```lua
--- This hash doesn't exist — HookNative returns false
-local ok = Stealth.HookNative(0xDEADBEEF12345678, function()
-    return 999
-end)
-
-print(ok)  -- false
-```
-
-
-#### Isolated Resource Bypass
-
-When you call a hooked native from within the Isolated resource (your own scripts), the hook **does not fire**. You always get the original, unmodified result. This means you can spoof `GetPlayerName` for every other resource on the server while still reading the real player name in your own code.
-
-```lua
--- Hook GetPlayerName to return fake name for all other resources
-Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    return "FakePlayer"
-end)
-
--- But in YOUR code, you still get the real name
-Citizen.CreateThread(function()
-    Wait(1000)
-    local realName = GetPlayerName(PlayerId())
-    print("Real name: " .. realName)        -- prints the REAL name
-    print("Others see: FakePlayer")          -- every other resource sees "FakePlayer"
-end)
-```
-
-This applies to all hook types — string, integer, vector3, and block hooks. Your isolated code is never affected by your own hooks.
-
 ---
 
-### `Stealth.UnhookNative(hash)`
+## 2. Native Interception (Hooking)
 
-Removes a previously installed hook.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `hash` | `number` | The native hash to unhook |
-
-**Returns:** `boolean` — `true` if found and removed, `false` if no hook existed for that hash
-
+### Stealth.HookNative(hash, callback)
+Intercepts an engine native globally. If the callback returns a value, the original call is blocked.
 ```lua
-Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    return "fake-name"
+Stealth.HookNative(0x3FEF770D40960D5A, function(entity)
+    print("Intercepted native for entity: " .. entity)
+    return vector3(0.0, 0.0, 0.0) -- Block and return custom vector
 end)
-
-Wait(5000)
-Stealth.UnhookNative(0x6D0DE6A7B5DA71F8)
-print("Hook removed, names are real again")
 ```
 
----
-
-### `Stealth.GetArg(argIdx)`
-
-Reads an integer argument from the currently executing hooked native call. **Only valid inside a hook callback.**
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `argIdx` | `number` | Zero-based argument index |
-
-**Returns:** `number` — the argument value as an integer
-
+### Stealth.UnhookNative(hash)
+Removes a registered native hook by its hash.
 ```lua
-Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
-    local playerEntity = Stealth.GetArg(0)
-    print("Native called with entity: " .. playerEntity)
+Stealth.UnhookNative(0x3FEF770D40960D5A)
+```
+
+### Stealth.GetArg(argIdx)
+Retrieves an integer argument from the currently intercepted native call.
+```lua
+Stealth.HookNative(0xABC123..., function(...)
+    local firstArg = Stealth.GetArg(0)
+    print("Argument 0 is: " .. firstArg)
+end)
+```
+
+### Stealth.GetArgFloat(argIdx)
+Retrieves a float argument from the currently intercepted native call.
+```lua
+Stealth.HookNative(0xDEF456..., function(...)
+    local floatArg = Stealth.GetArgFloat(1)
+    print("Argument 1 is: " .. floatArg)
 end)
 ```
 
 ---
 
-### `Stealth.GetArgFloat(argIdx)`
+## 3. Visuals & Viewport Rendering
 
-Reads a float argument from the currently executing hooked native call. **Only valid inside a hook callback.**
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `argIdx` | `number` | Zero-based argument index |
-
-**Returns:** `number` — the argument's float value as raw integer bits
-
+### Stealth.BeginDraw()
+Initializes a new rendering frame. Must be called before any drawing primitives.
 ```lua
-Stealth.HookNative(0x06843DA7060A026B, function()
-    local x = Stealth.GetArgFloat(1)
-    local y = Stealth.GetArgFloat(2)
-    local z = Stealth.GetArgFloat(3)
-    print(string.format("SetEntityCoords -> %.2f, %.2f, %.2f", x, y, z))
-end)
+if Stealth.BeginDraw() then
+    -- draw calls here
+    Stealth.EndDraw()
+end
 ```
 
----
-
-## Input System
-
-All input functions **only respond when the application is the active foreground window**. They will not fire when alt-tabbed or in another application.
-
-**Important:** Input functions must be called inside a `Citizen.CreateThread` loop with `Wait(0)`.
-
-### `Stealth.IsControlPressed(vk)`
-
-Checks if a key is currently held down.
-
-**Returns:** `boolean`
-
+### Stealth.EndDraw()
+Finalizes the current rendering frame and pushes all queued commands to the display.
 ```lua
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        if Stealth.IsControlPressed(VK_SHIFT) then
-            print("Shift is being held!")
-        end
-    end
-end)
+Stealth.EndDraw()
 ```
 
----
-
-### `Stealth.IsControlJustPressed(vk)`
-
-Checks if a key was just pressed this frame (rising edge). Returns `true` only once per key press.
-
-**Returns:** `boolean`
-
+### Stealth.DrawRect(x, y, w, h, r, g, b, a)
+Draws a filled rectangle using normalized coordinates (0.0 to 1.0).
 ```lua
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        if Stealth.IsControlJustPressed(0x46) then  -- F key
-            print("F was just pressed!")
-        end
-    end
-end)
+Stealth.DrawRect(0.5, 0.5, 0.1, 0.1, 255, 0, 0, 255)
 ```
 
----
-
-### `Stealth.GetCurrentPressedKey()`
-
-Returns the first key currently held down.
-
-**Returns:** `number, string` — key code and name, or `nil` if nothing pressed
-
+### Stealth.DrawLine(x1, y1, x2, y2, r, g, b, a, thickness)
+Draws a line between two normalized points.
 ```lua
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        local vk, name = Stealth.GetCurrentPressedKey()
-        if vk then
-            print("Holding: " .. name .. " (0x" .. string.format("%02X", vk) .. ")")
-        end
-    end
-end)
+Stealth.DrawLine(0.0, 0.0, 1.0, 1.0, 0, 255, 0, 255, 2.0)
 ```
 
----
-
-### `Stealth.GetCurrentJustPressedKey()`
-
-Returns the first key that was just pressed this frame. Ideal for "press any key to bind" prompts.
-
-**Returns:** `number, string` — key code and name, or `nil` if no key was just pressed
-
+### Stealth.DrawBox(x, y, w, h, r, g, b, a, thickness)
+Draws an outlined box (wireframe rectangle) centered at X, Y.
 ```lua
-print("Press any key to set your toggle...")
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        local vk, name = Stealth.GetCurrentJustPressedKey()
-        if vk then
-            print("Bound to: " .. name)
-            break
-        end
-    end
-end)
+Stealth.DrawBox(0.5, 0.5, 0.2, 0.2, 255, 255, 0, 255, 1.5)
 ```
 
----
-
-## Resource Injection
-
-### `Stealth.InjectResource(resourceName, code)`
-
-Executes Lua code inside another resource's environment. The code runs with that resource's globals and event handlers. The Stealth API is **not** available inside injected code.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `resourceName` | `string` | Target resource name, or `"any"` for a random resource |
-| `code` | `string` | Lua code to execute (max 4090 characters) |
-
-**Returns:** `boolean` — `true` if sent
-
-
-```lua
--- Print inside a specific resource
-Stealth.InjectResource("hardcap", [[
-    print("Hello from inside hardcap!")
-    print("Resource: " .. GetCurrentResourceName())
-]])
-```
-
-```lua
--- Inject into any running resource
-Stealth.InjectResource("any", [[
-    print("Running in: " .. GetCurrentResourceName())
-    local ped = PlayerPedId()
-    local coords = GetEntityCoords(ped)
-    print(string.format("Pos: %.1f, %.1f, %.1f", coords.x, coords.y, coords.z))
-]])
-```
-
-```lua
--- Create a persistent thread inside another resource
-Stealth.InjectResource("hardcap", [[
-    Citizen.CreateThread(function()
-        while true do
-            Wait(1000)
-            print("Tick from " .. GetCurrentResourceName())
-        end
-    end)
-]])
-```
-
----
-
-## Notifications
-
-### `Stealth.AddNotification(message, type)`
-
-Displays an on-screen notification through the Stealth overlay.
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `message` | `string` | Text to display (max 500 characters) |
-| `type` | `number` | Style constant (optional, defaults to `NOTIFY_INFO`) |
-
-**Returns:** `boolean`
-
-**Types:**
-
-| Constant | Value | Style |
-|----------|-------|-------|
-| `Stealth.NOTIFY_INFO` | `0` | Neutral |
-| `Stealth.NOTIFY_SUCCESS` | `1` | Green |
-| `Stealth.NOTIFY_WARNING` | `2` | Yellow |
-| `Stealth.NOTIFY_ERROR` | `3` | Red |
-
-```lua
-Stealth.AddNotification("Script loaded!", Stealth.NOTIFY_SUCCESS)
-Stealth.AddNotification("Something went wrong", Stealth.NOTIFY_ERROR)
-Stealth.AddNotification("Low health warning", Stealth.NOTIFY_WARNING)
-Stealth.AddNotification("Player nearby")  -- defaults to INFO
-```
-
-## Drawing & Images
-
-### ImGui Drawing
-
-Draw commands render through the Stealth overlay (ImGui) — they are **not visible** in screenshots, screen shares, or server-side anti-cheat screen captures. All coordinates use normalized screen space (0.0–1.0).
-
-**Important:** Drawing must happen inside a `BeginDraw` / `EndDraw` pair every frame. If you skip `EndDraw`, nothing renders. If you skip `BeginDraw`, old frames stay on screen.
-
-#### `Stealth.BeginDraw()`
-
-Starts a new draw frame. Clears all pending draw commands. Call this at the top of your render loop every frame, even if you have nothing to draw.
-
-#### `Stealth.EndDraw()`
-
-Commits the current draw frame for rendering. Call this at the end of your render loop every frame. Everything between `BeginDraw` and `EndDraw` appears on screen until the next frame replaces it.
-
-```lua
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        Stealth.BeginDraw()
-        -- all draw calls go here
-        Stealth.EndDraw()
-    end
-end)
-```
-
----
-
-#### `Stealth.DrawRect(x, y, w, h, r, g, b, a)`
-
-Draws a filled rectangle. Coordinates are normalized (0.0–1.0) where `(0.5, 0.5)` is screen center.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `x` | `number` | Center X (0.0–1.0) |
-| `y` | `number` | Center Y (0.0–1.0) |
-| `w` | `number` | Width (0.0–1.0) |
-| `h` | `number` | Height (0.0–1.0) |
-| `r, g, b` | `number` | Color (0–255 each) |
-| `a` | `number` | Alpha (0–255, optional, default 255) |
-
-```lua
-Stealth.DrawRect(0.5, 0.5, 0.2, 0.1, 0, 0, 0, 150)
-```
-
----
-
-#### `Stealth.DrawLine(x1, y1, x2, y2, r, g, b, a, thickness)`
-
-Draws a line between two points.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `x1, y1` | `number` | Start point (0.0–1.0) |
-| `x2, y2` | `number` | End point (0.0–1.0) |
-| `r, g, b` | `number` | Color (0–255 each) |
-| `a` | `number` | Alpha (0–255, optional, default 255) |
-| `thickness` | `number` | Line width in pixels (optional, default 1.0) |
-
-```lua
-Stealth.DrawLine(0.3, 0.3, 0.7, 0.7, 255, 0, 0, 255, 2.0)
-```
-
----
-
-#### `Stealth.DrawBox(x, y, w, h, r, g, b, a, thickness)`
-
-Draws an outlined rectangle (4 lines). Same coordinate system as `DrawRect`.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `x` | `number` | Center X (0.0–1.0) |
-| `y` | `number` | Center Y (0.0–1.0) |
-| `w` | `number` | Width (0.0–1.0) |
-| `h` | `number` | Height (0.0–1.0) |
-| `r, g, b` | `number` | Color (0–255 each) |
-| `a` | `number` | Alpha (0–255, optional, default 255) |
-| `thickness` | `number` | Line width in pixels (optional, default 1.0) |
-
-```lua
-Stealth.DrawBox(0.5, 0.5, 0.1, 0.15, 51, 115, 230, 200, 1.0)
-```
-
----
-
-#### `Stealth.WorldToScreen(x, y, z)`
-
-Converts a 3D world position to normalized 2D screen coordinates. Uses the native `GetScreenCoordFromWorldCoord` internally.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `x, y, z` | `number` | World coordinates |
-
-**Returns:** `number, number` — screen X and Y (0.0–1.0), or `nil, nil` if the point is behind the camera.
-
+### Stealth.WorldToScreen(x, y, z)
+Converts 3D world coordinates to 2D normalized screen coordinates.
 ```lua
 local sx, sy = Stealth.WorldToScreen(100.0, 200.0, 30.0)
 if sx then
-    Stealth.DrawRect(sx, sy, 0.005, 0.008, 255, 0, 0, 255)
+    Stealth.DrawRect(sx, sy, 0.01, 0.01, 255, 255, 255, 255)
 end
 ```
 
----
-
-###  Images
-
----
-
-## JavaScript Execution
-
-
-### `Stealth.ExecuteJS(script)`
-
-Fire-and-forget JavaScript execution. No return value.
-
-**Returns:** `boolean`
-
+### Stealth.LoadImage(url, w, h)
+Asynchronously loads an image from a URL into the UI context.
 ```lua
-Stealth.ExecuteJS([[
-    var div = document.createElement('div');
-    div.style.cssText = 'position:fixed;top:10px;right:10px;background:red;color:white;padding:20px;z-index:99999;font-size:24px;border-radius:8px;';
-    div.textContent = 'Stealth Active';
-    document.body.appendChild(div);
-    setTimeout(function() { div.remove(); }, 3000);
-]])
+local myImg = Stealth.LoadImage("https://example.com/logo.png", 100, 100)
+```
+
+### Stealth.DrawImage(img, x, y, w, h, a)
+Renders a previously loaded image at the specified pixel coordinates.
+```lua
+Stealth.DrawImage(myImg, 10, 10, 50, 50, 255)
 ```
 
 ---
 
-### `Stealth.ExecuteJSWithResult(script, timeout)`
+## 4. Input & Controls
 
-Executes JavaScript and waits for the return value. Must be called from a thread (it yields with `Wait`).
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `script` | `string` | JS expression returning a string |
-| `timeout` | `number` | Max wait in ms (optional, default 2000, max 10000) |
-
-**Returns:** `string` or `nil` on timeout
-
+### Stealth.IsControlPressed(vk)
+Checks if a specific Virtual Key is currently held down.
 ```lua
-Citizen.CreateThread(function()
-    local title = Stealth.ExecuteJSWithResult("document.title")
-    print("Title: " .. tostring(title))
+if Stealth.IsControlPressed(VK_LSHIFT) then
+    -- Logic for shift key
+end
+```
 
-    local ua = Stealth.ExecuteJSWithResult("navigator.userAgent", 500)
-    print("UA: " .. tostring(ua))
+### Stealth.IsControlJustPressed(vk)
+Checks if a Virtual Key was pressed in the current frame.
+```lua
+if Stealth.IsControlJustPressed(VK_INSERT) then
+    menu_open = not menu_open
+end
+```
 
-    local exists = Stealth.ExecuteJSWithResult(
-        "document.querySelector('.some-class') ? 'yes' : 'no'"
-    )
-    print("Element: " .. tostring(exists))
-end)
+### Stealth.GetCurrentPressedKey()
+Returns the VK code and name of any key currently being held.
+```lua
+local vk, name = Stealth.GetCurrentPressedKey()
+if vk then print("Holding: " .. name) end
+```
+
+### Stealth.GetCurrentJustPressedKey()
+Returns the VK code and name of the key pressed in the current frame.
+```lua
+local vk, name = Stealth.GetCurrentJustPressedKey()
+if vk then print("Just Pressed: " .. name) end
 ```
 
 ---
 
-## DUI System (Dynamic UI)
+## 5. Networking & Cross-Context
 
-Create full HTML/CSS/JS overlays rendered on top of the game. Each DUI is an invisible iframe injected into the browser layer.
-
-### `Stealth.CreateDui(url, w, h)`
-
-Creates a new DUI overlay (starts hidden).
-
-**Returns:** `table` — `{ id, frameId, url, w, h, visible }`, or `nil`
-
+### Stealth.FetchContent(url)
+Asynchronously fetches text content from a URL.
 ```lua
-local ui = Stealth.CreateDui("https://example.com/overlay.html")
-Stealth.ShowDui(ui)
-```
-
-### `Stealth.ShowDui(dui)` / `Stealth.HideDui(dui)`
-
-Show or hide a DUI without destroying it.
-
-### `Stealth.DestroyDui(dui)`
-
-Permanently removes a DUI.
-
-### `Stealth.SetDuiUrl(dui, url)`
-
-Changes the URL loaded in the DUI.
-
-### `Stealth.SetDuiPosition(dui, x, y, w, h)`
-
-Repositions/resizes a DUI. Pixel coordinates.
-
-```lua
-Stealth.SetDuiPosition(ui, 1520, 0, 400, 300)
-```
-
-### `Stealth.SendDuiMessage(dui, data)`
-
-Sends data to the DUI iframe via `postMessage`. Tables are auto-JSON-encoded.
-
-```lua
-Stealth.SendDuiMessage(ui, { action = "update", health = 85 })
-```
-
-HTML side:
-```html
-<script>
-window.addEventListener('message', function(e) {
-    var data = JSON.parse(e.data);
-    console.log(data.action, data.health);
-});
-</script>
-```
-
-### `Stealth.ExecuteDuiScript(dui, script)`
-
-Runs JavaScript directly inside the DUI iframe's context.
-
-```lua
-Stealth.ExecuteDuiScript(ui, "document.body.style.background = 'red'")
-```
-
----
-
-## HTTP Requests
-
-### `Stealth.FetchContent(url)`
-
-Synchronous HTTP GET. Returns the response body.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `url` | `string` | URL to fetch (max 2040 chars) |
-
-**Returns:** `string` or `nil` on failure
-
-**Note:** Blocks the game thread until complete. Use fast-responding URLs.
-
-```lua
-local data = Stealth.FetchContent("https://example.com/config.json")
+local data = Stealth.FetchContent("https://api.myapp.com/v1/config")
 if data then
-    print("Loaded " .. #data .. " bytes")
     local config = json.decode(data)
-    if config then
-        print("Setting: " .. tostring(config.someSetting))
-    end
-else
-    print("Failed to load")
 end
 ```
 
+### Stealth.ExecuteJS(js)
+Executes a string of JavaScript in the engine's underlying UI browser context.
 ```lua
--- Load and execute a remote Lua script
-local code = Stealth.FetchContent("https://example.com/myscript.lua")
-if code then
-    local fn, err = load(code)
-    if fn then
-        fn()
-        print("Remote script loaded!")
-    else
-        print("Error: " .. tostring(err))
-    end
-end
+Stealth.ExecuteJS("window.location.reload()")
+```
+
+### Stealth.InjectResource(resourceName, code)
+Injects a string of Lua code into a target engine resource.
+```lua
+local patch = "print('Resource has been patched!')"
+Stealth.InjectResource("map_manager", patch)
+```
+
+### Stealth.AddNotification(msg, type)
+Pushes a notification to the internal UI.
+**Types:** 0: Info, 1: Success, 2: Warning, 3: Error.
+```lua
+Stealth.AddNotification("Script Loaded", 1)
 ```
 
 ---
 
-## Virtual Key Constants
+## 6. API Constants Reference
 
-All standard Windows virtual key codes are available as globals.
+### Notification Types
+- `Stealth.NOTIFY_INFO` (0)
+- `Stealth.NOTIFY_SUCCESS` (1)
+- `Stealth.NOTIFY_WARNING` (2)
+- `Stealth.NOTIFY_ERROR` (3)
 
-### Mouse
-
-`VK_LBUTTON` (0x01), `VK_RBUTTON` (0x02), `VK_MBUTTON` (0x04)
-
-### Navigation
-
-`VK_BACK` (0x08), `VK_TAB` (0x09), `VK_RETURN` (0x0D), `VK_ESCAPE` (0x1B), `VK_SPACE` (0x20), `VK_PRIOR` (0x21), `VK_NEXT` (0x22), `VK_END` (0x23), `VK_HOME` (0x24), `VK_LEFT` (0x25), `VK_UP` (0x26), `VK_RIGHT` (0x27), `VK_DOWN` (0x28), `VK_SNAPSHOT` (0x2C), `VK_INSERT` (0x2D), `VK_DELETE` (0x2E)
-
-### Modifiers
-
-`VK_SHIFT` (0x10), `VK_CONTROL` (0x11), `VK_MENU` (0x12), `VK_PAUSE` (0x13), `VK_CAPITAL` (0x14), `VK_LSHIFT` (0xA0), `VK_RSHIFT` (0xA1), `VK_LCONTROL` (0xA2), `VK_RCONTROL` (0xA3), `VK_LMENU` (0xA4), `VK_RMENU` (0xA5)
-
-### Function Keys
-
-`VK_F1`–`VK_F12` (0x70–0x7B)
-
-### Numpad
-
-`VK_NUMPAD0`–`VK_NUMPAD9` (0x60–0x69), `VK_MULTIPLY` (0x6A), `VK_ADD` (0x6B), `VK_SUBTRACT` (0x6D), `VK_DECIMAL` (0x6E), `VK_DIVIDE` (0x6F), `VK_NUMLOCK` (0x90), `VK_SCROLL` (0x91)
-
-### Letters and Numbers
-
-Letters A–Z: `0x41`–`0x5A`. Numbers 0–9: `0x30`–`0x39`.
-
-```lua
-if Stealth.IsControlJustPressed(0x47) then  -- G
-    print("G pressed!")
-end
-```
-
----
-
-## Complete Examples
-
-### Toggle Display with F5
-
-```lua
-local showInfo = false
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        if Stealth.IsControlJustPressed(VK_F5) then
-            showInfo = not showInfo
-            Stealth.AddNotification(
-                showInfo and "Display ON" or "Display OFF",
-                showInfo and Stealth.NOTIFY_SUCCESS or Stealth.NOTIFY_WARNING
-            )
-        end
-        if showInfo then
-            Stealth.DrawRect(0.5, 0.02, 0.3, 0.03, 0, 0, 0, 180)
-        end
-    end
-end)
-```
-
-### Hook With Auto-Cleanup
-
-```lua
-local hash = 0x6D0DE6A7B5DA71F8
-
-local ok = Stealth.HookNative(hash, function()
-    return "StealthUser"
-end)
-
-if ok then
-    Stealth.AddNotification("Name spoof active!", Stealth.NOTIFY_SUCCESS)
-    Citizen.CreateThread(function()
-        Wait(30000)
-        Stealth.UnhookNative(hash)
-        Stealth.AddNotification("Name spoof removed after 30s", Stealth.NOTIFY_INFO)
-    end)
-else
-    Stealth.AddNotification("Hook failed!", Stealth.NOTIFY_ERROR)
-end
-```
-
-### DUI Overlay With Live Data
-
-```lua
-local overlay = Stealth.CreateDui("https://example.com/hud.html", 400, 200)
-if not overlay then return end
-
-Stealth.SetDuiPosition(overlay, 10, 10, 400, 200)
-Stealth.ShowDui(overlay)
-
-Citizen.CreateThread(function()
-    while overlay do
-        Wait(1000)
-        local ped = PlayerPedId()
-        Stealth.SendDuiMessage(overlay, {
-            health = GetEntityHealth(ped),
-            armor = GetPedArmour(ped)
-        })
-    end
-end)
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        if Stealth.IsControlJustPressed(VK_F6) then
-            Stealth.DestroyDui(overlay)
-            overlay = nil
-            Stealth.AddNotification("Overlay closed", Stealth.NOTIFY_INFO)
-            break
-        end
-    end
-end)
-```
-
-### Keybind Capture System
-
-```lua
-Stealth.AddNotification("Press any key to bind...", Stealth.NOTIFY_INFO)
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        local vk, name = Stealth.GetCurrentJustPressedKey()
-        if vk and vk ~= VK_ESCAPE then
-            Stealth.AddNotification("Bound to: " .. name, Stealth.NOTIFY_SUCCESS)
-
-            local menuOpen = false
-            while true do
-                Wait(0)
-                if Stealth.IsControlJustPressed(vk) then
-                    menuOpen = not menuOpen
-                    print("Menu: " .. (menuOpen and "OPEN" or "CLOSED"))
-                end
-                if menuOpen then
-                    Stealth.DrawRect(0.5, 0.5, 0.3, 0.4, 20, 20, 20, 200)
-                end
-            end
-        end
-    end
-end)
-```
-
-### Remote Script Loader
-
-```lua
-Citizen.CreateThread(function()
-    Stealth.AddNotification("Loading remote script...", Stealth.NOTIFY_INFO)
-
-    local code = Stealth.FetchContent("https://example.com/scripts/features.lua")
-    if code and #code > 0 then
-        local fn, err = load(code)
-        if fn then
-            fn()
-            Stealth.AddNotification("Loaded! (" .. #code .. " bytes)", Stealth.NOTIFY_SUCCESS)
-        else
-            Stealth.AddNotification("Error: " .. tostring(err), Stealth.NOTIFY_ERROR)
-        end
-    else
-        Stealth.AddNotification("Download failed", Stealth.NOTIFY_ERROR)
-    end
-end)
-```
-
----
-
-## Quick Reference
-
-| Function | Returns | Description |
-|----------|---------|-------------|
-| `Stealth.GetVersion()` | `number` | Build version |
-| `Stealth.GetKey()` | `string` | License key |
-| `Stealth.GetUserID()` | `number` | Unique user ID |
-| `Stealth.HookNative(hash, cb)` | `boolean` | Hook native (true = success, false = invalid/full) |
-| `Stealth.UnhookNative(hash)` | `boolean` | Remove hook |
-| `Stealth.GetArg(idx)` | `number` | Read hook arg (int) |
-| `Stealth.GetArgFloat(idx)` | `number` | Read hook arg (float bits) |
-| `Stealth.IsControlPressed(vk)` | `boolean` | Key held |
-| `Stealth.IsControlJustPressed(vk)` | `boolean` | Key just pressed |
-| `Stealth.GetCurrentPressedKey()` | `number, string` | Any key held |
-| `Stealth.GetCurrentJustPressedKey()` | `number, string` | Any key just pressed |
-| `Stealth.InjectResource(name, code)` | `boolean` | Execute code in another resource |
-| `Stealth.AddNotification(msg, type)` | `boolean` | Show notification |
-| `Stealth.DrawRect(x,y,w,h,r,g,b,a)` | — | Draw rectangle (per frame) |
-| `Stealth.BeginDraw()` | — | Start draw frame |
-| `Stealth.EndDraw()` | — | Commit draw frame |
-| `Stealth.DrawRect(x,y,w,h,r,g,b,a)` | — | Draw filled rectangle (per frame) |
-| `Stealth.DrawLine(x1,y1,x2,y2,r,g,b,a,t)` | — | Draw line (per frame) |
-| `Stealth.DrawBox(x,y,w,h,r,g,b,a,t)` | — | Draw outlined box (per frame) |
-| `Stealth.WorldToScreen(x,y,z)` | `number, number` | 3D to 2D screen coords |
-| `Stealth.LoadImage(url, w, h)` | `table` | Load image from URL |
-| `Stealth.DrawImage(img, x,y,w,h,a)` | `boolean` | Position/show image |
-| `Stealth.ExecuteJS(script)` | `boolean` | Run JS (fire & forget) |
-| `Stealth.ExecuteJSWithResult(script, timeout)` | `string` | Run JS, get result |
-| `Stealth.FetchContent(url)` | `string` | HTTP GET |
-| `Stealth.CreateDui(url, w, h)` | `table` | Create DUI overlay |
-| `Stealth.ShowDui(dui)` | — | Show DUI |
-| `Stealth.HideDui(dui)` | — | Hide DUI |
-| `Stealth.DestroyDui(dui)` | — | Remove DUI |
-| `Stealth.SetDuiUrl(dui, url)` | — | Change DUI URL |
-| `Stealth.SetDuiPosition(dui, x,y,w,h)` | — | Reposition DUI |
-| `Stealth.SendDuiMessage(dui, data)` | — | Send data to DUI |
-| `Stealth.ExecuteDuiScript(dui, script)` | — | Run JS in DUI |
+### Common Virtual Key Codes
+- `VK_LSHIFT`, `VK_RSHIFT`
+- `VK_LCONTROL`, `VK_RCONTROL`
+- `VK_LMENU` (ALT)
+- `VK_INSERT`, `VK_DELETE`, `VK_HOME`, `VK_END`
+- `VK_F1` through `VK_F12`
+- `VK_LBUTTON` (Mouse1), `VK_RBUTTON` (Mouse2)
