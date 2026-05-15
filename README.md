@@ -27,7 +27,7 @@ end)
 
 ```lua
 Stealth.HookNative(0x6D0DE6A7B5DA71F8, function(player)
-    Stealth.SetArg(0, 0)
+    Stealth.SetArg(0, 0) -- 0 is the first argument if you prefer this somehow
 end)
 ```
 
@@ -53,7 +53,7 @@ Stealth.InjectResource("any", [[
 
 ### Stealth.ExecuteJS(script)
 ```lua
-Stealth.ExecuteJS("document.body.style.backgroundColor = 'red'")
+Stealth.ExecuteJS("console.log('Hello World')") -- check NUI
 ```
 
 ## 3. Input
