@@ -43,7 +43,7 @@ Stealth.UnhookNative(0x6D0DE6A7B5DA71F8)
 ### Stealth.InjectResource(resourceName, code)
 ```lua
 Stealth.HookNative(0x6D0DE6A7B5DA71F8, function(player_id)
-    return "macho-man"
+    return "FakePlayerName"
 end)
 
 Stealth.InjectResource("any", [[
@@ -55,9 +55,6 @@ Stealth.InjectResource("any", [[
 ```lua
 Stealth.ExecuteJS("document.body.style.backgroundColor = 'red'")
 ```
-
-### GetCurrentResourceName()
-Returns "cfx_internal".
 
 ## 3. Input
 
