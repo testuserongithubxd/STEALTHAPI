@@ -1,57 +1,48 @@
-# Isolated Environment: Complete Developer Reference
+# Isolated Environment
 
-The Isolated Environment is a high-performance shadow layer that operates entirely outside the host engine's resource manager. This document is the exhaustive reference for every function, constant, and system behavior available to developers.
-
----
-
-## 1. Native Interception (Hooks)
-
-Native hooking globally intercepts engine functions. Any native called *from within* your Isolated script automatically bypasses all hooks, meaning you can safely call standard native wrappers like `GetPlayerName()` inside your hook without causing infinite loops.
+## 1. Hooks
 
 ### Stealth.HookNative(hash, callback)
-Registers a global interceptor. 
-- **Returns**: `true` on success, `false` if invalid or failed.
-- **Callback**: Receives all native arguments. Return a value to block the original native and spoof the result.
-
 ```lua
-Stealth.HookNative(0x3FEF770D40960D5A, function(entity)
-    print(entity)
-    print("0x3FEF770D40960D5A called")
-    return vector3(0,0,0)
+Stealth.HookNative(0xF25DF915FA38C5F3, function(ped)
+    print("RemoveAllPedWeapons: " .. tostring(ped))
+    Stealth.SetArg(ped, 0) 
 end)
 ```
 
 ```lua
-local ok = Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
+Stealth.HookNative(0x6D0DE6A7B5DA71F8, function()
     return "FakePlayerName"
 end)
+```
 
-if ok then
-    print("GetPlayerName hook active!")
-else
-    print("Failed to hook — invalid hash or slots full")
-end
+### Stealth.SetArg(target, value)
+`target` is the 0-based index or the current value.
+
+```lua
+Stealth.HookNative(0xF25DF915FA38C5F3, function(ped)
+    Stealth.SetArg(ped, 0) 
+end)
+```
+
+```lua
+Stealth.HookNative(0x6D0DE6A7B5DA71F8, function(player)
+    Stealth.SetArg(0, 0)
+end)
 ```
 
 ### Stealth.UnhookNative(hash)
-Removes an active hook, restoring normal engine behavior.
 ```lua
 Stealth.UnhookNative(0x6D0DE6A7B5DA71F8) 
 ```
 
 ### Stealth.GetArg(argIdx) / Stealth.GetArgFloat(argIdx)
-Manual argument retrieval within a hook context.
 
----
-
-## 2. Cross-Context & Interop
+## 2. Resources
 
 ### Stealth.InjectResource(resourceName, code)
-Executes Lua inside a standard engine resource. Using `"any"` will target any available resource.
-
 ```lua
 Stealth.HookNative(0x6D0DE6A7B5DA71F8, function(player_id)
-    print(GetCurrentResourceName() .. " tried to get our real name: " .. GetPlayerName(player_id))
     return "macho-man"
 end)
 
@@ -61,61 +52,44 @@ Stealth.InjectResource("any", [[
 ```
 
 ### Stealth.ExecuteJS(script)
-Runs JavaScript in the global UI context.
 ```lua
 Stealth.ExecuteJS("document.body.style.backgroundColor = 'red'")
 ```
 
-### GetCurrentResourceName() (Global Override)
-Always returns `"cfx_internal"`. Any script or hook checking your origin will see this secure alias.
+### GetCurrentResourceName()
+Returns "cfx_internal".
 
----
-
-## 3. Input & Controls
+## 3. Input
 
 ### Stealth.IsControlPressed(vk)
-Checks if a Virtual Key is currently held down.
 ```lua
 Citizen.CreateThread(function()
     while true do
         Wait(0)
         if Stealth.IsControlPressed(0x02) then
-            -- Action while holding Right Mouse Button
+            -- Right Mouse
         end
     end
 end)
 ```
 
 ### Stealth.IsControlJustPressed(vk)
-Checks for a single-frame key press (triggers only once per click).
 ```lua
-local menuOpen = false
 Citizen.CreateThread(function()
     while true do
         Wait(0)
         if Stealth.IsControlJustPressed(VK_INSERT) then
-            menuOpen = not menuOpen
+            -- Insert
         end
     end
 end)
 ```
 
 ### Stealth.GetCurrentPressedKey() / Stealth.GetCurrentJustPressedKey()
-Returns the VK code and the human-readable name of the key.
-```lua
-local vk, name = Stealth.GetCurrentJustPressedKey()
-if vk then print("Key Pressed: " .. name) end
-```
 
----
+## 4. Rendering
 
-## 4. Primitive Rendering
-
-All drawing functions use **Normalized Coordinates** (0.0 to 1.0).
-
-### Stealth.BeginDraw() & Stealth.EndDraw()
-**CRITICAL**: `BeginDraw` must be checked. If it returns false, the frame is not ready. `EndDraw` must be called to push the frame to the screen.
-
+### Stealth.BeginDraw() / Stealth.EndDraw()
 ```lua
 Citizen.CreateThread(function()
     while true do
@@ -131,49 +105,22 @@ end)
 ```
 
 ### Stealth.WorldToScreen(x, y, z)
-Converts 3D coordinates to normalized 2D. 
-```lua
-local sx, sy = Stealth.WorldToScreen(100.0, 200.0, 30.0)
-if sx and sy then
-    Stealth.DrawBox(sx, sy, 0.05, 0.05, 0, 255, 0, 255, 1.5)
-end
-```
 
----
-
-## 5. System & Authentication
+## 5. System
 
 ### Stealth.GetVersion() / Stealth.GetUserID() / Stealth.GetKey()
-```lua
-local hwid = Stealth.GetUserID()
-local key = Stealth.GetKey()
-local ver = Stealth.GetVersion()
-```
 
 ### Stealth.CloseGame()
-Immediately terminates the engine process.
 
----
+## 6. Networking
 
-## 6. Networking & Async
+### Stealth.FetchContent(url)
 
-### Stealth.FetchContent(url) (Synchronous)
-```lua
-local cfg = Stealth.FetchContent("https://api.example.com/data.json")
-```
+### Stealth.FetchContentAsync(url, callback)
 
-### Stealth.FetchContentAsync(url, callback) (Asynchronous)
-```lua
-Stealth.FetchContentAsync("https://api.example.com/status", function(response)
-    print("Response: " .. tostring(response))
-end)
-```
+## 7. DUI
 
----
-
-## 7. Image & Browser Rendering (DUI)
-
-### Stealth.LoadImage(url, w, h) & Stealth.DrawImage(img, x, y, w, h, a)
+### Stealth.LoadImage(url, w, h) / Stealth.DrawImage(img, x, y, w, h, a)
 ```lua
 local logo = Stealth.LoadImage("https://i.imgur.com/example.png", 64, 64)
 
@@ -185,27 +132,12 @@ Citizen.CreateThread(function()
 end)
 ```
 
-### DUI System (Advanced Browser Frames)
+### Stealth.CreateDui(url, w, h)
 ```lua
-local menuUI = Stealth.CreateDui("https://my-hosted-menu.com", 1920, 1080)
-
-Citizen.CreateThread(function()
-    local visible = false
-    while true do
-        Wait(0)
-        if Stealth.IsControlJustPressed(VK_INSERT) then
-            visible = not visible
-            if visible then Stealth.ShowDui(menuUI) else Stealth.HideDui(menuUI) end
-            Stealth.SendDuiMessage(menuUI, { action = "toggle", state = visible })
-        end
-    end
-end)
+local menuUI = Stealth.CreateDui("https://example.com", 1920, 1080)
 ```
 
----
-
-## 8. Complete Master Script: Self-ESP
-A fully functional ESP integrating `BeginDraw`, `EndDraw`, `WorldToScreen`, bounding boxes, health bars, and skeleton mapping.
+## 8. ESP Script
 
 ```lua
 Citizen.CreateThread(function()
